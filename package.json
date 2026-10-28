@@ -1,0 +1,20 @@
+{
+  "name": "dsh-plugin-ui-for-mobile",
+  "repository": { "type": "git", "url": "git+https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile.git" },
+  "homepage": "https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile#readme",
+  "bugs": { "url": "https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile/issues" },
+  "keywords": ["dsh", "deepseek-harness", "dsh-plugin", "mobile", "responsive"],
+  "publishConfig": { "access": "public" },
+  "version": "0.1.1",
+  "description": "Narrow-screen viewport, keyboard and overlay sidebar compatibility for DSH Web",
+  "type": "module",
+  "license": "MIT",
+  "exports": { ".": "./index.js", "./client": "./client.js" },
+  "files": ["index.js", "client.js", "cordis.patch.yml", "README.md"],
+  "scripts": { "build": "node scripts/build.mjs", "test": "node --test --test-isolation=none tests/*.test.mjs", "pack:plugin": "npm run build && npm pack" },
+  "engines": { "node": ">=22" },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web", "immediately": true, "inject": ["@deepseek-ai/dsh-client-ui-layout"] }
+  }
+}

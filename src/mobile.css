@@ -1,0 +1,58 @@
+/* Compatibility adapter: only active on narrow browser windows, never desktop chrome. */
+html[data-dsh-mobile] { overflow: hidden; overscroll-behavior-x: none; }
+html[data-dsh-mobile] body { overflow: hidden; width: 100%; height: 100%; margin: 0; }
+html[data-dsh-mobile] #root {
+  position: fixed; top: var(--dsh-mobile-top, 0px); left: 0;
+  width: 100%; max-width: 100%; height: var(--dsh-mobile-height, 100dvh);
+  min-height: 0; overflow: hidden;
+}
+html[data-dsh-mobile] [data-dsh-mobile-frame] {
+  width: 100%; min-width: 0; max-width: 100%; height: 100%; min-height: 0;
+  grid-template-columns: 56px minmax(0, 1fr) 0px !important;
+  transition: none !important;
+  --dsh-composer-text-max-height: max(48px, min(180px, calc(var(--dsh-mobile-height, 100dvh) * .28)));
+}
+html[data-dsh-mobile] [data-dsh-mobile-center] {
+  grid-column: 2; grid-row: 1; min-width: 0; max-width: 100%; overflow: hidden;
+}
+html[data-dsh-mobile] [data-dsh-mobile-sidebar] {
+  grid-column: 1; grid-row: 1; width: 56px; min-width: 0; box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+html[data-dsh-mobile] [data-dsh-mobile-frame]:not([data-sidebar-collapsed]) > [data-dsh-mobile-sidebar] {
+  position: absolute; inset: 0 auto 0 0; width: min(280px, calc(100% - 48px));
+  z-index: 32; box-shadow: 8px 0 32px rgb(0 0 0 / .18);
+  background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base, #fff));
+}
+html[data-dsh-mobile] [data-dsh-mobile-sidebar] > * { max-width: 100%; box-sizing: border-box; }
+html[data-dsh-mobile] [data-dsh-mobile-frame] > [data-side] { display: none !important; }
+html[data-dsh-mobile] [data-dsh-mobile-center] ~ [data-rightbar-col] { grid-column: 3; grid-row: 1; }
+html[data-dsh-mobile] :is(input, textarea, select, [contenteditable='true'], [role='textbox']) {
+  font-size: 16px !important;
+}
+html[data-dsh-mobile] [data-composer-card] {
+  min-width: 0; max-width: 100%; font-size: 16px;
+  --dsh-composer-text-max-height: max(48px, min(180px, calc(var(--dsh-mobile-height, 100dvh) * .28)));
+}
+html[data-dsh-mobile] [data-composer-card] :is(button, [role='button']) { min-height: 40px; min-width: 36px; touch-action: manipulation; }
+html[data-dsh-mobile] [data-composer-card] [contenteditable] { scroll-margin-block: 12px; }
+html[data-dsh-mobile] [data-composer-dock] { padding-bottom: env(safe-area-inset-bottom, 0px); }
+html[data-dsh-mobile][data-dsh-mobile-keyboard] [data-composer-dock] { padding-bottom: 0; }
+html[data-dsh-mobile] :is(button, a, [role='button']) { touch-action: manipulation; }
+html[data-dsh-mobile] :is(pre, [data-diff], [data-read], [data-terminal]) { max-width: 100%; overflow-x: auto; }
+/* Keep React-owned labels intact; show a compact visual reading only on mobile. */
+html[data-dsh-mobile] [data-composer-dock] { gap: 3px; flex-wrap: wrap; }
+html[data-dsh-mobile] [data-composer-dock] [data-composer-stat] { font-size: 11px; line-height: 20px; }
+html[data-dsh-mobile] [data-composer-stat] > :first-child { gap: 3px; padding: 2px 3px; }
+html[data-dsh-mobile] [data-composer-stat] svg { width: 12px; height: 12px; }
+html[data-dsh-mobile] [data-dsh-mobile-stat-label] { font-size: 0; }
+html[data-dsh-mobile] [data-dsh-mobile-stat-label] > * { display: none; }
+html[data-dsh-mobile] [data-dsh-mobile-stat-label]::after {
+  content: attr(data-dsh-mobile-stat-label); font-size: 11px; line-height: 20px;
+}
+html[data-dsh-mobile] [data-composer-dock] > :last-child { font-size: 11px; }
+.dsh-mobile-backdrop {
+  position: absolute; inset: 0 0 0 min(280px, calc(100% - 48px));
+  border: 0; padding: 0; background: rgb(0 0 0 / .32); pointer-events: auto;
+  touch-action: manipulation; z-index: 1;
+}

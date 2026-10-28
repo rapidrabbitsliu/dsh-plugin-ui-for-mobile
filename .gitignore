@@ -1,0 +1,9 @@
+.npm-cache/
+*.tgz
+*.png
+node_modules/
+.env
+.env.*
+.npmrc
+probe.cjs
+VALIDATION.md
