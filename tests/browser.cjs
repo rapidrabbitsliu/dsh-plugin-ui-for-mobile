@@ -33,6 +33,23 @@ try {
  const keyboard=await state();assert.equal(keyboard.root.y,20);assert.equal(keyboard.root.height,450);
  assert.ok(await page.locator('#editor').evaluate(e=>e.getBoundingClientRect().bottom)<=470);
  await page.screenshot({path:'test-mobile-keyboard.png'});
+ await page.evaluate(()=>{
+   const panel=document.createElement('div'); panel.dataset.shortcutModal='settings'; panel.setAttribute('role','dialog');
+   panel.style.cssText='display:flex;width:800px;height:700px;max-width:calc(100vw - 48px);background:white';
+   panel.innerHTML='<nav style="width:188px;display:flex;flex-direction:column"><div>设置</div><div style="display:flex;flex-direction:column">'+Array.from({length:12},(_,i)=>'<button>设置分类 '+i+'</button>').join('')+'</div></nav><div style="display:flex;flex-direction:column;flex:1;min-width:0"><div><div><button>操作</button></div><button aria-label="关闭">×</button></div><div style="flex:1;min-height:0">'+Array.from({length:30},(_,i)=>'<p>设置项目 '+i+' <input placeholder="设置输入"></p>').join('')+'</div></div>';
+   // Host styling is normally stylesheet based rather than inline.
+   panel.removeAttribute('style');
+   for(const e of panel.querySelectorAll('[style]'))e.removeAttribute('style');
+   document.body.append(panel);
+ });
+ const settings=page.locator('[data-shortcut-modal="settings"]');
+ assert.equal((await settings.boundingBox()).width,390);
+ assert.equal((await settings.boundingBox()).height,450);
+ assert.equal((await settings.boundingBox()).y,20);
+ assert.equal(await settings.locator('nav > :last-child').evaluate(e=>getComputedStyle(e).flexDirection),'row');
+ assert.ok(await settings.locator('nav > :last-child').evaluate(e=>e.scrollWidth>e.clientWidth));
+ assert.equal(await settings.locator('button[aria-label="关闭"]').evaluate(e=>e.getBoundingClientRect().height),44);
+ await settings.evaluate(e=>e.remove());
  await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>!document.documentElement.hasAttribute('data-dsh-mobile'));
  await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>document.documentElement.hasAttribute('data-dsh-mobile'));
  await page.evaluate(()=>{document.documentElement.style.setProperty('--unrelated-theme','kept');for(const stop of window.disposers.reverse())stop();});

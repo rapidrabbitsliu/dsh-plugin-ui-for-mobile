@@ -36,6 +36,7 @@ Enabled only for narrow **Web browser** windows at **767 CSS px or below**, not 
 - Contain document-level horizontal overflow; code blocks retain their own horizontal scrolling.
 - Keep the 56px collapsed navigation rail; expanded sidebar overlays the conversation instead of squeezing it. Tap the backdrop or press Escape to close.
 - Bound long-draft height and account for the bottom safe area.
+- Present mobile settings full-screen with horizontally scrollable categories, independently scrolling content, and a 44px close button.
 - Compact mobile statistics: `5r 95s · 51/s`, `7.3M · H 32%`, and context percentage; full labels and details remain accessible.
 - Restore plugin-owned styles, variables, DOM markers and listeners when disabled or returning to desktop width.
 

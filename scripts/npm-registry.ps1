@@ -13,7 +13,10 @@ try {
     npm view dsh-plugin-ui-for-mobile name version --registry=https://registry.npmjs.org --fetch-timeout=15000 --fetch-retries=0 --cache .npm-cache
     # E404 is expected before first publication; inspect the output.
   } else {
-    npm publish ./dsh-plugin-ui-for-mobile-0.1.1.tgz --access public --registry=https://registry.npmjs.org --fetch-timeout=30000 --fetch-retries=0 --cache .npm-cache
+    $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../package.json') -Raw | ConvertFrom-Json
+    $archive = './dsh-plugin-ui-for-mobile-' + $manifest.version + '.tgz'
+    if (-not (Test-Path -LiteralPath $archive)) { throw "Release archive missing: $archive" }
+    npm publish $archive --access public --registry=https://registry.npmjs.org --fetch-timeout=30000 --fetch-retries=0 --cache .npm-cache
     if ($LASTEXITCODE -ne 0) { throw 'npm publish failed.' }
   }
 } finally {

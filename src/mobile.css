@@ -51,6 +51,54 @@ html[data-dsh-mobile] [data-dsh-mobile-stat-label]::after {
   content: attr(data-dsh-mobile-stat-label); font-size: 11px; line-height: 20px;
 }
 html[data-dsh-mobile] [data-composer-dock] > :last-child { font-size: 11px; }
+/* Settings is portalled beside #root; use its own stable modal marker. */
+html[data-dsh-mobile] [data-shortcut-modal='settings'] {
+  position: fixed; top: var(--dsh-mobile-top, 0px); left: 0;
+  width: 100%; max-width: 100%; height: var(--dsh-mobile-height, 100dvh);
+  max-height: var(--dsh-mobile-height, 100dvh); min-height: 0;
+  box-sizing: border-box; border-radius: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] > nav {
+  flex: none; width: 100%; min-width: 0; padding: 0 12px;
+  gap: 0; box-sizing: border-box;
+  border-bottom: 1px solid var(--dsw-alias-border-l3, #ddd);
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] > nav > :first-child {
+  display: flex; align-items: center; min-height: 52px;
+  padding: 0 52px 0 4px;
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] > nav > :last-child {
+  display: flex; flex-direction: row; flex-wrap: nowrap; gap: 4px; min-width: 0;
+  overflow-x: auto; overflow-y: hidden; padding: 0 0 8px;
+  overscroll-behavior-x: contain; scroll-padding-inline: 8px;
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] > nav button {
+  flex: none; min-height: 44px; height: auto; padding: 8px 12px;
+  white-space: nowrap; scroll-margin-inline: 8px;
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div {
+  display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden;
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :first-child {
+  height: auto; min-height: 44px; padding: 4px 12px; align-items: center;
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :first-child > :first-child {
+  flex-wrap: wrap; max-width: 100%; margin-left: 0;
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :first-child > button {
+  position: absolute; top: calc(env(safe-area-inset-top, 0px) + 4px); right: 8px;
+  width: 44px; height: 44px; z-index: 2;
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :last-child {
+  flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain;
+  padding: 8px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  overflow-wrap: anywhere; scroll-padding-block: 16px;
+}
+html[data-dsh-mobile] [data-shortcut-modal='settings'] :is(input, textarea, select) {
+  max-width: 100%; box-sizing: border-box;
+}
 .dsh-mobile-backdrop {
   position: absolute; inset: 0 0 0 min(280px, calc(100% - 48px));
   border: 0; padding: 0; background: rgb(0 0 0 / .32); pointer-events: auto;

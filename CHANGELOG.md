@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+- Make the mobile settings dialog fill the visual viewport, including while the keyboard is open.
+- Replace the fixed-width side navigation with horizontally scrollable category buttons.
+- Keep the close control in the top-right with a 44px touch target.
+- Give settings content its own scroll area and safe-area padding.
+- Add simulated mobile settings layout regression checks.
+
 ## 0.1.1
 
 First public release as `dsh-plugin-ui-for-mobile`.
