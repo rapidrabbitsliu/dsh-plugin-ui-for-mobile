@@ -35,6 +35,7 @@ export function installMobile(ctx, css, win = window) {
   let center = null;
   let active = false;
   let open = false;
+  let navigation = 'inactive';
   let raf = 0;
   let disposed = false;
   const style = doc.createElement('style');
@@ -68,8 +69,10 @@ export function installMobile(ctx, css, win = window) {
     originals.clear();
   }
   function publish(next) {
-    if (open === next) return;
     open = next;
+    const state = active ? (open ? 'open' : 'closed') : 'inactive';
+    if (navigation === state) return;
+    navigation = state;
     for (const listener of listeners) listener();
   }
   function findShell() {
@@ -120,6 +123,41 @@ export function installMobile(ctx, css, win = window) {
         attr(label, 'data-dsh-mobile-stat-label', compactStat(label.textContent ?? ''));
       }
     }
+    // Header-only adapter: keep React's labels and event handlers untouched.
+    const leading = center.querySelector('[data-conversation-header-leading]');
+    const header = leading?.closest('header');
+    if (header) {
+      attr(header, 'data-dsh-mobile-header', '');
+      const corner = header.querySelector('[data-conversation-header-corner]');
+      if (corner) {
+        attr(corner.parentElement, 'data-dsh-mobile-title-row', '');
+        const row = corner.parentElement;
+        const cluster = row?.firstElementChild;
+        if (cluster && cluster !== corner && cluster.querySelector('nav')) {
+          attr(cluster, 'data-dsh-mobile-title-cluster', '');
+          const actions = cluster.querySelector('nav')?.nextElementSibling;
+          if (actions) attr(actions, 'data-dsh-mobile-header-actions', '');
+        }
+        const utilities = corner.previousElementSibling;
+        if (utilities && utilities !== cluster && utilities.tagName === 'DIV') attr(utilities, 'data-dsh-mobile-utilities', '');
+      }
+      for (const button of header.querySelectorAll('button[aria-expanded][aria-label]')) {
+        const label = button.getAttribute('aria-label') ?? '';
+        if (/^(?:更多会话视图|More conversation views)(?:\s*·|$)/i.test(label)) {
+          attr(button, 'data-dsh-mobile-hidden-view-more', '');
+          // Hide its anchor as well, so no empty flex gap remains.
+          const anchor = button.parentElement;
+          if (anchor?.parentElement?.querySelector('[data-conversation-tabs]')) attr(anchor, 'data-dsh-mobile-hidden-view-more', '');
+        }
+        const kind = /后台任务|background jobs?/i.test(label) ? 'jobs'
+          : /子智能体|subagents?/i.test(label) && button.getAttribute('aria-haspopup') === 'tree' ? 'agents' : null;
+        const count = [...button.children].find(child => child.tagName === 'SPAN' && /^\s*\d+\s*(?:个\s*)?(?:子智能体|后台任务|subagents?|background jobs?)/i.test(child.textContent ?? ''));
+        if (kind && count) {
+          attr(button, 'data-dsh-mobile-header-counter', kind);
+          attr(count, 'data-dsh-mobile-header-count', (count.textContent ?? '').match(/\d+/)?.[0] ?? '0');
+        }
+      }
+    }
     const geometry = viewportGeometry(win);
     if (geometry) {
       property('--dsh-mobile-height', `${geometry.height}px`);
@@ -149,7 +187,8 @@ export function installMobile(ctx, css, win = window) {
   sync();
   return {
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    getSnapshot() { return open; },
+    getSnapshot() { return navigation; },
+    toggle() { if (active) ctx.layout.toggleSidebar(); },
     close,
     dispose() {
       disposed = true;

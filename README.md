@@ -15,7 +15,7 @@ Replace `web` with the profile actually used by your `dsh web` instance. Refresh
 Alternatively download the `.tgz` from [GitHub Releases](https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile/releases):
 
 ```sh
-dsh plugin --profile web add ./dsh-plugin-ui-for-mobile-0.1.1.tgz
+dsh plugin --profile web add ./dsh-plugin-ui-for-mobile-0.1.10.tgz
 ```
 
 ### Upgrade from the local prototype
@@ -33,8 +33,11 @@ Enabled only for narrow **Web browser** windows at **767 CSS px or below**, not 
 
 - Follow `visualViewport` height and offset to keep the existing composer inside the visible area when the keyboard appears.
 - Use 16px input/search/editor text to reduce iOS focus zoom. Intentional pinch zoom remains available.
+- Compact mobile header subagent/job counters to outlined icon-plus-number buttons, without chevrons; preserve accessible names and tighten right-side action spacing.
 - Contain document-level horizontal overflow; code blocks retain their own horizontal scrolling.
-- Keep the 56px collapsed navigation rail; expanded sidebar overlays the conversation instead of squeezing it. Tap the backdrop or press Escape to close.
+- Mobile conversation uses the full viewport width, without a persistent sidebar rail. Tap the pixel chibi whale-maid girl peeking from the left edge to open the sidebar; tap the backdrop or press Escape to close. She hides while navigation is open.
+- Drag the mascot to reposition: full-body flailing animation during drag, then snap back to the left edge. Vertical position is stored locally. Idle animation includes blinks, a multi-frame wave, and a low-frequency cartoon nose-pick/flick easter egg (tiny noninteractive pixel falls offscreen). An occasional apple snack scene reveals an apple, inspects its glint, shows it off, takes two bites and smiles contentedly. Idle actions stop on interaction or when the page is hidden; reduced-motion preferences disable idle animation and shaking. Only the mascot touch area disables native touch panning.
+- The whale is an unofficial GPT Image adaptation based on a user-provided character reference. The original reference is not distributed. See assets/README.md for AI provenance and third-party character-rights limitations; the code's MIT license does not claim ownership of the reference character.
 - Bound long-draft height and account for the bottom safe area.
 - Present mobile settings full-screen with horizontally scrollable categories, independently scrolling content, and a 44px close button.
 - Compact mobile statistics: `5r 95s · 51/s`, `7.3M · H 32%`, and context percentage; full labels and details remain accessible.
