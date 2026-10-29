@@ -27,6 +27,9 @@ export function installMobile(ctx, css, win = window) {
   const doc = win.document;
   const html = doc.documentElement;
   const media = win.matchMedia(`(max-width: ${BREAKPOINT}px)`);
+  // Phone landscape may exceed the layout breakpoint. Keep text inflation
+  // prevention active through rotation without enabling the narrow layout there.
+  const textMedia = win.matchMedia(`(max-width: ${BREAKPOINT}px), (pointer: coarse) and (max-height: ${BREAKPOINT}px)`);
   const listeners = new Set();
   const originals = new Map();
   const properties = new Map();
@@ -88,16 +91,21 @@ export function installMobile(ctx, css, win = window) {
     raf = 0;
     if (disposed) return;
     const shell = findShell();
-    const enabled = media.matches && !!shell
-      && !html.hasAttribute('data-windows-titlebar') && !html.hasAttribute('data-platform');
+    const browserShell = !!shell && !html.hasAttribute('data-windows-titlebar') && !html.hasAttribute('data-platform');
+    const enabled = media.matches && browserShell;
+    function syncTextSizing() {
+      attr(html, 'data-dsh-mobile-text-sizing', browserShell && textMedia.matches ? '' : null);
+    }
     if (!enabled) {
       if (active) restore();
+      syncTextSizing();
       active = false; frame = sidebar = center = null; publish(false); return;
     }
     if (frame !== shell.frame) {
       restore();
       ({frame, sidebar, center} = shell);
     }
+    syncTextSizing();
     active = true;
     attr(html, 'data-dsh-mobile', '');
     attr(frame, 'data-dsh-mobile-frame', '');
@@ -178,6 +186,8 @@ export function installMobile(ctx, css, win = window) {
     childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['data-sidebar-collapsed'],
   });
   media.addEventListener('change', schedule);
+  textMedia.addEventListener('change', schedule);
+  win.addEventListener('orientationchange', schedule);
   win.addEventListener('resize', schedule);
   win.visualViewport?.addEventListener('resize', schedule);
   win.visualViewport?.addEventListener('scroll', schedule);
@@ -195,6 +205,8 @@ export function installMobile(ctx, css, win = window) {
       if (raf) win.cancelAnimationFrame(raf);
       observer.disconnect();
       media.removeEventListener('change', schedule);
+      textMedia.removeEventListener('change', schedule);
+      win.removeEventListener('orientationchange', schedule);
       win.removeEventListener('resize', schedule);
       win.visualViewport?.removeEventListener('resize', schedule);
       win.visualViewport?.removeEventListener('scroll', schedule);

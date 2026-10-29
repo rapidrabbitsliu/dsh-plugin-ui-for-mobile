@@ -15,7 +15,7 @@ Replace `web` with the profile actually used by your `dsh web` instance. Refresh
 Alternatively download the `.tgz` from [GitHub Releases](https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile/releases):
 
 ```sh
-dsh plugin --profile web add ./dsh-plugin-ui-for-mobile-0.1.10.tgz
+dsh plugin --profile web add ./dsh-plugin-ui-for-mobile-0.1.11.tgz
 ```
 
 ### Upgrade from the local prototype
@@ -29,7 +29,7 @@ dsh plugin --profile web add dsh-plugin-ui-for-mobile
 
 ## Features
 
-Enabled only for narrow **Web browser** windows at **767 CSS px or below**, not the native desktop shell:
+Layout adaptation is enabled only for narrow **Web browser** windows at **767 CSS px or below**, not the native desktop shell. Text auto-inflation protection also remains enabled on coarse-pointer phone landscape windows with a height ≤767 CSS px, to avoid sticky enlarged text after rotation:
 
 - Follow `visualViewport` height and offset to keep the existing composer inside the visible area when the keyboard appears.
 - Use 16px input/search/editor text to reduce iOS focus zoom. Intentional pinch zoom remains available.

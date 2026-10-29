@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.11 — public release
+
+- Set prefixed/unprefixed text-size-adjust to 100% to prevent mobile browser text inflation during orientation changes, without fixing message font sizes or disabling pinch zoom.
+- Keep text sizing protection active for coarse-pointer phone landscape windows beyond the narrow-layout breakpoint.
+- Observe orientation changes and restore owned markers/listeners on teardown.
+- Simulated browser regression covers repeated portrait/landscape transitions with unchanged message nodes; the user confirmed the fix on their mobile device (browser/device model unspecified).
+
 ## 0.1.10 — public release
 
 Consolidates local previews 0.1.3–0.1.9: full-width mobile chat, draggable animated mascot navigation, compact header controls, and header overflow corrections. No DSH source modifications.

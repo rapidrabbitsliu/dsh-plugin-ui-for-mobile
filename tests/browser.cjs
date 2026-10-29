@@ -119,10 +119,25 @@ try {
  assert.ok(await settings.locator('nav > :last-child').evaluate(e=>e.scrollWidth>e.clientWidth));
  assert.equal(await settings.locator('button[aria-label="关闭"]').evaluate(e=>e.getBoundingClientRect().height),44);
  await settings.evaluate(e=>e.remove());
- await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>!document.documentElement.hasAttribute('data-dsh-mobile'));
+ // A phone's landscape width crosses 767px: only layout deactivates,
+  // text inflation prevention must survive and protect the same message nodes.
+  const messageNode=await page.locator('#messages').elementHandle();
+  const fontBefore=await page.locator('#messages').evaluate(e=>getComputedStyle(e).fontSize);
+  for(let rotation=0;rotation<2;rotation++) {
+    await page.setViewportSize({width:844,height:390});
+    await page.waitForFunction(()=>!document.documentElement.hasAttribute('data-dsh-mobile')&&document.documentElement.hasAttribute('data-dsh-mobile-text-sizing'));
+    assert.equal(await page.locator('#messages').evaluate(e=>getComputedStyle(e).webkitTextSizeAdjust),'100%');
+    assert.equal(await page.locator('#messages').evaluate(e=>getComputedStyle(e).fontSize),fontBefore);
+    await page.setViewportSize({width:390,height:844});
+    await page.waitForFunction(()=>document.documentElement.hasAttribute('data-dsh-mobile'));
+    assert.equal(await page.locator('#messages').evaluate(e=>getComputedStyle(e).webkitTextSizeAdjust),'100%');
+    assert.equal(await messageNode.evaluate(e=>e===document.querySelector('#messages')),true);
+  }
+  await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>!document.documentElement.hasAttribute('data-dsh-mobile'));
  await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>document.documentElement.hasAttribute('data-dsh-mobile'));
  await page.evaluate(()=>{document.documentElement.style.setProperty('--unrelated-theme','kept');for(const stop of window.disposers.reverse())stop();});
  assert.equal(await page.locator('[data-dsh-mobile-style]').count(),0);
+  assert.equal(await page.evaluate(()=>document.documentElement.hasAttribute('data-dsh-mobile-text-sizing')),false);
  assert.equal(await page.locator('[data-dsh-mobile-frame]').count(),0);
  assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--unrelated-theme')),'kept');
  assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--dsh-mobile-height')),'');

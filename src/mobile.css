@@ -1,3 +1,10 @@
+/* Prevent browser text inflation, not user zoom or the host's chosen font sizes.
+   Separate from narrow-layout activation so phone landscape stays protected. */
+html[data-dsh-mobile-text-sizing], html[data-dsh-mobile-text-sizing] body,
+html[data-dsh-mobile-text-sizing] #root {
+  -webkit-text-size-adjust: 100% !important;
+  text-size-adjust: 100% !important;
+}
 /* Compatibility adapter: only active on narrow browser windows, never desktop chrome. */
 html[data-dsh-mobile] { overflow: hidden; overscroll-behavior-x: none; }
 html[data-dsh-mobile] body { overflow: hidden; width: 100%; height: 100%; margin: 0; }
