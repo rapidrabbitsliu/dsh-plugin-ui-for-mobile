@@ -5,6 +5,14 @@ html[data-dsh-mobile-text-sizing] #root {
   -webkit-text-size-adjust: 100% !important;
   text-size-adjust: 100% !important;
 }
+.dsh-mobile-newline { display: none !important; }
+html[data-dsh-mobile] .dsh-mobile-newline {
+  display: inline-flex !important; align-items: center; justify-content: center;
+  min-width: 36px; min-height: 36px; padding: 4px 7px; border: 1px solid #8793a455;
+  border-radius: 7px; background: transparent; color: inherit; font: inherit; font-size: 20px;
+  touch-action: manipulation; cursor: pointer; flex: 0 0 auto;
+}
+html[data-dsh-mobile] .dsh-mobile-newline:active { background: #6198d222; }
 /* Compatibility adapter: only active on narrow browser windows, never desktop chrome. */
 html[data-dsh-mobile] { overflow: hidden; overscroll-behavior-x: none; }
 html[data-dsh-mobile] body { overflow: hidden; width: 100%; height: 100%; margin: 0; }

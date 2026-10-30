@@ -175,13 +175,52 @@ export function installMobile(ctx, css, win = window) {
   }
   function schedule() { if (!disposed && !raf) raf = win.requestAnimationFrame(sync); }
   function close() { if (active && frame && !frame.hasAttribute('data-sidebar-collapsed')) ctx.layout.toggleSidebar(); }
+  let pendingSubmit = null;
+  let submitTimer = 0;
+  let compositionUntil = 0;
+  function clearPendingSubmit() {
+    pendingSubmit = null;
+    if (submitTimer) win.clearTimeout(submitTimer);
+    submitTimer = 0;
+  }
+  function checkSubmitted() {
+    const editor = pendingSubmit;
+    if (!editor) return;
+    if (!active || !editor.isConnected || doc.activeElement !== editor) { clearPendingSubmit(); return; }
+    // A prevented Enter alone also means completion selection or blocked send.
+    // Only dismiss after the host actually consumes/clears the draft.
+    if (!(editor.textContent ?? '').replace(/[\s\u200b]/g, '') && !editor.querySelector('[data-composer-text-ref]')) {
+      clearPendingSubmit();
+      editor.blur();
+    }
+  }
+  function composition(event) {
+    if (event.target?.closest?.('[data-composer-input]')) {
+      compositionUntil = event.type === 'compositionstart' ? Infinity : Date.now() + 20;
+      clearPendingSubmit();
+    }
+  }
+  function composerEnter(event) {
+    clearPendingSubmit();
+    const editor = event.target?.closest?.('[data-composer-input][contenteditable="true"]');
+    if (!active || !editor || !center?.contains(editor) || event.key !== 'Enter'
+      || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || event.repeat
+      || event.isComposing || event.keyCode === 229 || Date.now() < compositionUntil
+      || editor.hasAttribute('data-composer-composing')
+      || !(editor.textContent ?? '').trim()
+      || editor.hasAttribute('aria-activedescendant')) return;
+    pendingSubmit = editor;
+    submitTimer = win.setTimeout(clearPendingSubmit, 1500);
+    // Run after Lexical/React's original key handlers; never consume the event.
+    win.queueMicrotask(() => { if (!disposed) checkSubmitted(); });
+  }
   function keydown(event) {
     if (event.key === 'Escape' && open && !doc.querySelector('[role="dialog"], [role="menu"]')) {
       event.preventDefault(); close();
     }
   }
   // Observe shell mounting/replacement and host sidebar state, not every message mutation attribute.
-  const observer = new win.MutationObserver(schedule);
+  const observer = new win.MutationObserver(() => { schedule(); checkSubmitted(); });
   observer.observe(doc.getElementById('root') ?? doc.body, {
     childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['data-sidebar-collapsed'],
   });
@@ -194,6 +233,9 @@ export function installMobile(ctx, css, win = window) {
   doc.addEventListener('focusin', schedule);
   doc.addEventListener('focusout', schedule);
   doc.addEventListener('keydown', keydown);
+  doc.addEventListener('keydown', composerEnter, true);
+  doc.addEventListener('compositionstart', composition, true);
+  doc.addEventListener('compositionend', composition, true);
   sync();
   return {
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
@@ -202,6 +244,7 @@ export function installMobile(ctx, css, win = window) {
     close,
     dispose() {
       disposed = true;
+      clearPendingSubmit();
       if (raf) win.cancelAnimationFrame(raf);
       observer.disconnect();
       media.removeEventListener('change', schedule);
@@ -213,6 +256,9 @@ export function installMobile(ctx, css, win = window) {
       doc.removeEventListener('focusin', schedule);
       doc.removeEventListener('focusout', schedule);
       doc.removeEventListener('keydown', keydown);
+      doc.removeEventListener('keydown', composerEnter, true);
+      doc.removeEventListener('compositionstart', composition, true);
+      doc.removeEventListener('compositionend', composition, true);
       restore(); style.remove(); listeners.clear();
     },
   };

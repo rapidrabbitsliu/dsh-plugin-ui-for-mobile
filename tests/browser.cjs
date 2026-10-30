@@ -16,11 +16,14 @@ try {
     const fakeReact={
       useSyncExternalStore(subscribe,get){if(!subscriptions.has(subscribe)){subscriptions.add(subscribe);subscribe(()=>queueMicrotask(()=>render()));}return get();},
       useRef(){return {current:null};},useEffect(fn){effects.push(fn);},
-      createElement(tag,props,...children){const el=document.createElement(tag);for(const [key,value] of Object.entries(props??{})){if(key==='ref'){value.current=el;}else if(key==='onClick')el.onclick=value;else if(key==='className')el.className=value;else el.setAttribute(key,value);}for(const child of children)if(child)el.append(child);return el;},
+      createElement(tag,props,...children){const el=document.createElement(tag);for(const [key,value] of Object.entries(props??{})){if(key==='ref'){value.current=el;}else if(key==='onClick')el.onclick=value;else if(key==='onPointerDown')el.onpointerdown=value;else if(key==='onMouseDown')el.onmousedown=value;else if(key==='className')el.className=value;else el.setAttribute(key,value);}for(const child of children)if(child)el.append(child);return el;},
     };
     window.__ModuleLoader__={load(module){window.mobile=module.factory(()=>fakeReact);}};
    window.disposers=[];
-   const ctx={layout:{toggleSidebar(){const el=document.querySelector('#frame');el.toggleAttribute('data-sidebar-collapsed');}},locale:{register(){return ()=>{};}},effect(fn){const stop=fn();if(stop)window.disposers.push(stop);},slots:{inject(name,setup){return setup();},register(options,Component){render=()=>{for(const stop of cleanups)stop();cleanups=[];effects=[];const host=document.querySelector('[data-shell-overlay]');host.replaceChildren();const node=Component({t:key=>key});if(node)host.append(node);for(const effect of effects){const stop=effect();if(stop)cleanups.push(stop);}};render();return ()=>{for(const stop of cleanups)stop();cleanups=[];render=()=>{};document.querySelector('[data-shell-overlay]').replaceChildren();};}}};
+   const ctx={layout:{toggleSidebar(){const el=document.querySelector('#frame');el.toggleAttribute('data-sidebar-collapsed');}},locale:{register(){return ()=>{};}},effect(fn){const stop=fn();if(stop)window.disposers.push(stop);},slots:{inject(name,setup){return setup();},register(options,Component){if(options.name==='conversation.input.right'){
+      const actions={captureInsertion(){return {selection:window.getSelection().getRangeAt(0).cloneRange()};},insertText(text,span){const r=span.selection;r.deleteContents();const node=document.createTextNode(text);r.insertNode(node);r.setStartAfter(node);r.collapse(true);const s=window.getSelection();s.removeAllRanges();s.addRange(r);return true;},persistDraft(){window.newlinePersisted=true;}};
+      const node=Component({t:key=>key,inputActions:actions});document.querySelector('[data-composer-card]').append(node);return ()=>node.remove();
+    }render=()=>{for(const stop of cleanups)stop();cleanups=[];effects=[];const host=document.querySelector('[data-shell-overlay]');host.replaceChildren();const node=Component({t:key=>key});if(node)host.append(node);for(const effect of effects){const stop=effect();if(stop)cleanups.push(stop);}};render();return ()=>{for(const stop of cleanups)stop();cleanups=[];render=()=>{};document.querySelector('[data-shell-overlay]').replaceChildren();};}}};
    window.mobileContext=ctx;
    document.querySelector('#toggle').onclick=()=>ctx.layout.toggleSidebar();
  });
@@ -119,7 +122,41 @@ try {
  assert.ok(await settings.locator('nav > :last-child').evaluate(e=>e.scrollWidth>e.clientWidth));
  assert.equal(await settings.locator('button[aria-label="关闭"]').evaluate(e=>e.getBoundingClientRect().height),44);
  await settings.evaluate(e=>e.remove());
- // A phone's landscape width crosses 767px: only layout deactivates,
+ // Model the host keymap: successful submission clears the same editor.
+  async function enterCase(mode, options={}) {
+    return page.evaluate(async ({mode,options})=>{
+      const e=document.querySelector('#editor');e.setAttribute('data-composer-input','');e.textContent='测试草稿';e.focus();
+      const host=event=>{event.preventDefault();if(mode==='sent')e.textContent='';};
+      e.addEventListener('keydown',host,{once:true});
+      e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...options}));
+      await Promise.resolve();await Promise.resolve();
+      return document.activeElement===e;
+    },{mode,options});
+  }
+  assert.equal(await enterCase('sent'),false);
+  assert.equal(await enterCase('blocked'),true);
+  await page.evaluate(()=>{const e=document.querySelector('#editor');e.textContent='异步发送';e.focus();e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));});
+  await page.evaluate(()=>{document.querySelector('#editor').textContent='';});
+  await page.waitForFunction(()=>document.activeElement!==document.querySelector('#editor'));
+  assert.equal(await enterCase('blocked'),true);
+  assert.equal(await enterCase('completion'),true);
+  assert.equal(await enterCase('sent',{shiftKey:true}),true);
+  assert.equal(await enterCase('sent',{isComposing:true}),true);
+  assert.equal(await enterCase('sent',{keyCode:229}),true);
+  assert.equal(await enterCase('sent',{repeat:true}),true);
+  await page.evaluate(()=>{document.querySelector('#editor').dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));});
+  assert.equal(await enterCase('sent'),true);
+  await page.evaluate(()=>{document.querySelector('#editor').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}));});
+  assert.equal(await enterCase('sent'),true);
+  await page.clock.runFor(30);
+  await page.evaluate(()=>{const e=document.querySelector('#editor');e.textContent='甲乙';e.focus();const r=document.createRange();r.setStart(e.firstChild,1);r.collapse(true);const s=getSelection();s.removeAllRanges();s.addRange(r);});
+  assert.equal(await page.locator('.dsh-mobile-newline').isVisible(),true);
+  await page.locator('.dsh-mobile-newline').dispatchEvent('pointerdown',{button:0,isPrimary:true,pointerType:'touch'});
+  await page.locator('.dsh-mobile-newline').dispatchEvent('click',{detail:1});
+  assert.equal(await page.locator('#editor').textContent(),'甲\n乙');
+  assert.equal(await page.locator('#editor').evaluate(e=>document.activeElement===e),true);
+  assert.equal(await page.evaluate(()=>window.newlinePersisted),true);
+  // A phone's landscape width crosses 767px: only layout deactivates,
   // text inflation prevention must survive and protect the same message nodes.
   const messageNode=await page.locator('#messages').elementHandle();
   const fontBefore=await page.locator('#messages').evaluate(e=>getComputedStyle(e).fontSize);
@@ -134,6 +171,8 @@ try {
     assert.equal(await messageNode.evaluate(e=>e===document.querySelector('#messages')),true);
   }
   await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>!document.documentElement.hasAttribute('data-dsh-mobile'));
+  assert.equal(await page.locator('.dsh-mobile-newline').isVisible(),false);
+  assert.equal(await enterCase('sent'),true);
  await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>document.documentElement.hasAttribute('data-dsh-mobile'));
  await page.evaluate(()=>{document.documentElement.style.setProperty('--unrelated-theme','kept');for(const stop of window.disposers.reverse())stop();});
  assert.equal(await page.locator('[data-dsh-mobile-style]').count(),0);

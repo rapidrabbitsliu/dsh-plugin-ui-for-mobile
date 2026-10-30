@@ -15,8 +15,8 @@ ${mascot}
       inject: ['slots', 'layout', 'locale'],
       apply(ctx) {
         ctx.effect(() => ctx.locale.register('mobileUi', {
-          zh: {close: '关闭侧边栏', open: '打开会话侧边栏'},
-          en: {close: 'Close sidebar', open: 'Open conversation sidebar'},
+          zh: {close: '关闭侧边栏', open: '打开会话侧边栏', newline: '换行'},
+          en: {close: 'Close sidebar', open: 'Open conversation sidebar', newline: 'Insert line break'},
         }));
         ctx.effect(() => {
           const adapter = installMobile(ctx, ${JSON.stringify(css)});
@@ -47,13 +47,37 @@ ${mascot}
               onClick: adapter.toggle,
             }, React.createElement('img', {src: mascotFrames[0], alt: '', draggable: false}));
           }
-          let stop;
+          function Newline({t, inputActions}) {
+            function insert(event) {
+              if (event.type === 'pointerdown' && (event.button !== 0 || event.isPrimary === false)) return;
+              if (event.type === 'click' && event.detail !== 0) return;
+              event.preventDefault();
+              const editor = document.querySelector('[data-dsh-mobile-center] [data-composer-input][contenteditable="true"]');
+              if (!editor || editor.hasAttribute('data-composer-composing') || !inputActions) return;
+              // Public revision-guarded API preserves the editor/selection/undo.
+              const span = inputActions.captureInsertion();
+              if (inputActions.insertText('\\n', span)) {
+                inputActions.persistDraft();
+                editor.focus({preventScroll: true});
+              }
+            }
+            return React.createElement('button', {
+              type: 'button', className: 'dsh-mobile-newline',
+              'aria-label': t('newline'), title: t('newline'),
+              onPointerDown: insert, onClick: insert,
+              onMouseDown: event => event.preventDefault(),
+            }, '↵');
+          }
+          let stop, stopNewline;
           try {
+            stopNewline = ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+              name: 'conversation.input.right', id: 'mobile-ui.newline', locale: 'mobileUi',
+            }, Newline));
             stop = ctx.slots.inject('shell.overlay', () => ctx.slots.register({
               name: 'shell.overlay', id: 'mobile-ui.backdrop', locale: 'mobileUi',
             }, Navigation));
-          } catch (error) { adapter.dispose(); throw error; }
-          return () => { stop(); adapter.dispose(); };
+          } catch (error) { stopNewline?.(); adapter.dispose(); throw error; }
+          return () => { stop(); stopNewline(); adapter.dispose(); };
         });
       },
     };

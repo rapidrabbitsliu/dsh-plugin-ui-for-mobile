@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.13 — public release
+
+Includes the Enter-to-dismiss behavior developed in local preview 0.1.12. The user confirmed the combined mobile behavior works (device/browser unspecified).
+
+- Add a mobile-only ↵ line-break button in the existing conversation.input.right slot.
+- Use the host's captureInsertion/insertText/persistDraft API to insert at the caret without sending or replacing the draft.
+- Preserve focus on touch and ignore the follow-up pointer click to avoid duplicate line breaks; desktop hides the control.
+- Fixture verifies middle-of-draft insertion and focus retention; the user also confirmed the combined behavior on their mobile device.
+
+## 0.1.12 — local preview
+
+- Blur the mobile chat composer after plain Enter consumes/clears the draft, requesting keyboard dismissal without interfering with the host submit handler.
+- Keep focus for Shift+Enter, modified/repeated Enter, IME candidate confirmation, completion selection and blocked sends that retain the draft.
+- Handle synchronous and asynchronous draft clearing within a bounded 1.5-second window; clean up timers/listeners on disposal.
+- Browser fixture covers submission blur and focus-preserving exclusions. Real-device keyboard dismissal remains to be confirmed.
+
 ## 0.1.11 — public release
 
 - Set prefixed/unprefixed text-size-adjust to 100% to prevent mobile browser text inflation during orientation changes, without fixing message font sizes or disabling pinch zoom.
