@@ -8,7 +8,7 @@
 - Keep workspace expand chevrons permanently visible instead of swapping folder/chevron on hover.
 - Preserve original single-click workspace toggle and session navigation handlers; do not simulate double-clicks or alter session history.
 - Disable session-row double-click rename on mobile; row menu actions remain available.
-- Touch fixture covers first-tap toggle/open, action menus, and double-click suppression. Actual iOS/Android and bottom session navigation need user confirmation.
+- Touch fixture covers first-tap toggle/open, action menus, and double-click suppression. The user confirmed sidebar first-tap behavior and bottom session-bar synchronization on their phone; device/browser model unspecified.
 
 ## 0.1.13 — public release
 

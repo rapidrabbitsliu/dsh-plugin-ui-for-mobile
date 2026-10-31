@@ -114,7 +114,7 @@ dsh plugin --profile web add dsh-plugin-ui-for-mobile
 - 工作区／会话行右侧操作按钮常显，减少触摸设备首次点按只触发悬停显形、没有执行点击的问题。
 - 保留 DSH 原有工作区单击展开／收拢和会话单击打开逻辑，不通过模拟双击实现。
 - 禁用移动端会话标题双击重命名，重命名仍可从行操作菜单进入。
-- 实际手机首次点按是否彻底解决，以及底部会话栏是否同步，仍需真实页面验收；插件不另写一套会话历史或底部切换逻辑。
+- 用户已在手机上验证首次点按和底部会话栏同步正常；插件保留 DSH 原有会话历史及底部切换逻辑。
 
 ## 手机操作速查
 
@@ -143,8 +143,8 @@ dsh plugin --profile web add dsh-plugin-ui-for-mobile
 
 - Node 单元测试覆盖视口几何、统计缩写和角色动作时间线。
 - Chrome 模拟 shell 回归覆盖布局、侧栏、拖动、动画／粒子清理、减少动态效果、设置、顶部边界、横竖屏、回车失焦和换行按钮等。
-- 用户已在手机上确认横竖屏文字修复、换行按钮和回车收键盘组合体验；设备及浏览器型号未记录。
-- 自动测试不等于真实系统键盘；独立的已认证 DSH 页面自动化、完整 iOS／Android 设备矩阵，以及 0.1.14 的真实手机侧栏联动仍未完成验证。
+- 用户已在手机上确认横竖屏文字修复、换行按钮、回车收键盘，以及 0.1.14 的侧栏首次点按和底部会话栏同步；设备及浏览器型号未记录。
+- 用户实测不等于完整设备覆盖；独立的已认证 DSH 页面自动化和完整 iOS／Android 设备矩阵仍未完成验证。
 
 遇到问题请在 [Issues](https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile/issues) 提供 DSH 版本、浏览器／系统、窗口尺寸、是否从主屏幕打开，以及复现步骤。
 
@@ -191,13 +191,13 @@ Independent mobile Web compatibility plugin for DSH: no DSH source changes, no s
 - VisualViewport keyboard handling, bounded draft height, safe areas, 16px inputs, horizontal overflow containment and text auto-inflation prevention across phone rotation. User pinch zoom remains available.
 - Mobile-only **↵** inserts a line break through the host's public input API. Plain Enter blurs the composer after the host clears the draft; IME/modifier and blocked-send exclusions retain focus.
 - Outlined icon-and-count subagent/job triggers, tighter header spacing, compact statistics and full-screen mobile settings.
-- **Since 0.1.14:** always-visible sidebar action strips/expand chevrons and suppression of session-title double-click rename; original single-click handlers and menu rename remain. Real-device first-tap/bottom-session synchronization still needs verification.
+- **Since 0.1.14:** always-visible sidebar action strips/expand chevrons and suppression of session-title double-click rename; original single-click handlers and menu rename remain. The user confirmed first-tap behavior and bottom session-bar synchronization on their phone.
 
 Release target: **0.1.14** (previous release: 0.1.13). Check GitHub Releases and the npm registry for actual channel availability; accepted publication may take time to become publicly downloadable. Installation commands above use the existing DSH Web profile. Refresh after installation; restart the original instance only if needed.
 
 Layout applies at ≤767 CSS px in supported Web shells, not native desktop shells. Text sizing protection also covers coarse-pointer landscape windows with height ≤767 CSS px. This is a DOM/CSS adapter statically checked against DSH 0.2.1-rc.3, not a stable cross-version layout API. No orientation lock, offline support or PWA/native packaging is provided. Model/attachment focus behavior remains a known limitation.
 
-Automated tests use a simulated shell/viewport, not a full authenticated DSH or native iOS/Android keyboard matrix. User mobile verification covers rotation text sizing and the newline/keyboard combination. Artwork is unofficial AI-generated reference-derived material; see [provenance and rights limitations](./assets/README.md).
+Automated tests use a simulated shell/viewport, not a full authenticated DSH or native iOS/Android keyboard matrix. User mobile verification covers rotation text sizing, the newline/keyboard combination, sidebar first-tap behavior and bottom session-bar synchronization. Artwork is unofficial AI-generated reference-derived material; see [provenance and rights limitations](./assets/README.md).
 
 ## License
 
