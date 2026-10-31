@@ -122,7 +122,28 @@ try {
  assert.ok(await settings.locator('nav > :last-child').evaluate(e=>e.scrollWidth>e.clientWidth));
  assert.equal(await settings.locator('button[aria-label="关闭"]').evaluate(e=>e.getBoundingClientRect().height),44);
  await settings.evaluate(e=>e.remove());
- // Model the host keymap: successful submission clears the same editor.
+ await page.evaluate(()=>{
+    const box=document.createElement('div');box.innerHTML='<div role="treeitem" data-row-key="workspace:test" aria-expanded="false"><span><svg></svg></span><span><svg></svg></span><span class="fixture-work-title">工作区</span><span class="fixture-actions"><button>新建</button></span></div><div role="treeitem" data-row-key="session:test" aria-selected="false"><span id="fixture-title">会话</span><span class="fixture-actions"><button>会话菜单</button></span></div>';
+    document.querySelector('#sidebar').append(box);
+    const style=document.createElement('style');style.textContent='.fixture-actions{display:none}[data-row-key]:hover .fixture-actions{display:inline-flex}';document.head.append(style);
+    const w=box.children[0],s=box.children[1];w.onclick=()=>w.setAttribute('aria-expanded',String(w.getAttribute('aria-expanded')!=='true'));
+    s.onclick=()=>{s.setAttribute('aria-selected','true');window.fixtureCurrent='test';};
+    document.querySelector('#fixture-title').ondblclick=()=>{window.fixtureRenamed=true;};
+    box.querySelectorAll('button').forEach(b=>b.onclick=e=>{e.stopPropagation();window.fixtureMenu=true;});
+  });
+  await page.waitForFunction(()=>document.querySelectorAll('[data-dsh-mobile-row-actions]').length===2);
+  await page.locator('.dsh-mobile-whale').click();
+  const work=page.locator('[data-row-key="workspace:test"]');
+  const session=page.locator('[data-row-key="session:test"]');
+  assert.equal(await work.locator('button').isVisible(),true);
+  await work.locator('.fixture-work-title').tap();assert.equal(await work.getAttribute('aria-expanded'),'true');
+  await work.locator('.fixture-work-title').tap();assert.equal(await work.getAttribute('aria-expanded'),'false');
+  await session.locator('#fixture-title').tap();assert.equal(await page.evaluate(()=>window.fixtureCurrent),'test');
+  await session.locator('#fixture-title').dispatchEvent('dblclick');assert.equal(await page.evaluate(()=>!!window.fixtureRenamed),false);
+  await session.locator('button').tap();assert.equal(await page.evaluate(()=>window.fixtureMenu),true);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(()=>!document.querySelector('#center').inert);
+  // Model the host keymap: successful submission clears the same editor.
   async function enterCase(mode, options={}) {
     return page.evaluate(async ({mode,options})=>{
       const e=document.querySelector('#editor');e.setAttribute('data-composer-input','');e.textContent='测试草稿';e.focus();

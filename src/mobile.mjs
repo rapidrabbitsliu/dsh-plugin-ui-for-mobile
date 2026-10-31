@@ -124,6 +124,17 @@ export function installMobile(ctx, css, win = window) {
       }
     }
     publish(expanded);
+    // Keep hover-revealed action strips permanently laid out on touch screens.
+    // iOS may consume the first tap to reveal display:none hover descendants.
+    for (const row of sidebar.querySelectorAll('[data-row-key]')) {
+      const key = row.getAttribute('data-row-key') ?? '';
+      if (!/^(workspace|session):/.test(key)) continue;
+      for (const child of row.children) {
+        if (child.tagName === 'SPAN' && child.querySelector('button')) {
+          attr(child, 'data-dsh-mobile-row-actions', '');
+        }
+      }
+    }
     for (const stat of frame.querySelectorAll('[data-composer-dock] [data-composer-stat]')) {
       const pill = stat.firstElementChild;
       const label = pill?.lastElementChild;
@@ -175,6 +186,14 @@ export function installMobile(ctx, css, win = window) {
   }
   function schedule() { if (!disposed && !raf) raf = win.requestAnimationFrame(sync); }
   function close() { if (active && frame && !frame.hasAttribute('data-sidebar-collapsed')) ctx.layout.toggleSidebar(); }
+  function sidebarDoubleClick(event) {
+    if (!active) return;
+    const row = event.target?.closest?.('[data-row-key^="session:"]');
+    if (!row || !sidebar?.contains(row) || event.target.closest('button, input, textarea, [role="menuitem"]')) return;
+    // Suppress only the row title's desktop rename shortcut, never its menu.
+    event.preventDefault();
+    event.stopPropagation();
+  }
   let pendingSubmit = null;
   let submitTimer = 0;
   let compositionUntil = 0;
@@ -233,6 +252,7 @@ export function installMobile(ctx, css, win = window) {
   doc.addEventListener('focusin', schedule);
   doc.addEventListener('focusout', schedule);
   doc.addEventListener('keydown', keydown);
+  doc.addEventListener('dblclick', sidebarDoubleClick, true);
   doc.addEventListener('keydown', composerEnter, true);
   doc.addEventListener('compositionstart', composition, true);
   doc.addEventListener('compositionend', composition, true);
@@ -256,6 +276,7 @@ export function installMobile(ctx, css, win = window) {
       doc.removeEventListener('focusin', schedule);
       doc.removeEventListener('focusout', schedule);
       doc.removeEventListener('keydown', keydown);
+      doc.removeEventListener('dblclick', sidebarDoubleClick, true);
       doc.removeEventListener('keydown', composerEnter, true);
       doc.removeEventListener('compositionstart', composition, true);
       doc.removeEventListener('compositionend', composition, true);

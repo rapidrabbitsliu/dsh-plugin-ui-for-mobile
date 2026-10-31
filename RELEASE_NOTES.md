@@ -1,33 +1,33 @@
-# v0.1.13 — Mobile newline button and keyboard dismissal
+# v0.1.14 — Touch-friendly sidebar and complete feature guide
 
 ## 更新内容
 
-- 移动端聊天输入区新增「↵」换行按钮，桌面端隐藏。
-- 点击按钮通过 DSH 的公开输入 API 在当前光标处插入换行，保留输入焦点，不发送消息；避免触摸后的 click 重复插入。
-- 普通回车发送并清空草稿后自动失焦，请求收起软键盘。
-- Shift+Enter、修饰键回车、输入法选字、候选补全及保留草稿的受阻发送不会触发自动失焦。
-- 支持同步或 1.5 秒内异步清空草稿，停用插件时清理监听和计时器。
+- 移动端工作区／会话行右侧操作按钮常显，避免依赖悬停显形，减少首次触摸只高亮的问题。
+- 工作区展开箭头常显，不再在悬停时交换文件夹与箭头。
+- 保留 DSH 原有单击展开／收拢、会话打开逻辑，不模拟双击、不另写会话历史。
+- 禁用移动端会话标题双击重命名；重命名仍可从行操作菜单进入，桌面端不变。
+- 完整重写 README：功能介绍、像素角色动作、输入与键盘操作、顶部统计、设置、兼容限制和验证范围；同步英文摘要与安装示例。
 
-Includes local preview 0.1.12. No DSH source changes; the existing editor and submit handlers are preserved.
+No DSH source modifications. Existing newline, keyboard dismissal, rotation text-sizing and animated navigation features remain available.
 
 ## Install / upgrade
 
 ```sh
-dsh plugin --profile web add dsh-plugin-ui-for-mobile@0.1.13
+dsh plugin --profile web add dsh-plugin-ui-for-mobile@0.1.14
 ```
 
 Or download the attached archive:
 
 ```sh
-dsh plugin --profile web add ./dsh-plugin-ui-for-mobile-0.1.13.tgz
+dsh plugin --profile web add ./dsh-plugin-ui-for-mobile-0.1.14.tgz
 ```
 
-Use your active Web profile. Refresh the page; restart the original `dsh web` instance only if necessary.
+Use the active Web profile and refresh the original authenticated page. Restart the original `dsh web` instance only if needed.
 
-## Verification and compatibility
+## Verification and limitations
 
-- Eight Node unit tests and simulated Chrome regression, covering Enter submission blur, blocked sends, IME/modifier exclusions, asynchronous draft clearing, caret-position newline insertion and focus retention.
-- Installed in the local Web profile; the user confirmed the combined mobile behavior works. Device/browser model was unspecified.
-- Statically checked against DSH 0.2.1-rc.3; full iOS/Android matrix and independent authenticated-page automation remain unverified.
-- New controls and Enter blur apply to the existing narrow-browser mode (≤767 CSS px), not native desktop shells.
-- Existing unofficial AI-generated artwork provenance and third-party rights limitations remain unchanged; see assets/README.md.
+- Eight Node unit tests and simulated Chrome regression; touch fixture covers first-tap workspace expand/collapse, session open, action-menu accessibility and double-click rename suppression.
+- Local preview was installed in the web profile. Real iOS/Android first-tap behavior and bottom session-bar synchronization still require user confirmation; this release does not implement separate bottom-tab navigation.
+- Statically checked against DSH 0.2.1-rc.3; narrow-browser layout at ≤767 CSS px, not native desktop shells.
+- Full device matrix and independent authenticated-page automation remain unverified. No orientation lock or PWA packaging is added.
+- Existing unofficial AI-generated artwork provenance and third-party character rights limitations remain unchanged; see assets/README.md.

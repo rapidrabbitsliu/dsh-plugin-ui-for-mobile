@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.14 — public release
+
+- Rewrite the README with complete Chinese feature/interaction documentation, an aligned English summary, installation examples, verification scope and known limitations.
+
+- Keep sidebar workspace/session action strips visible on mobile, removing the hover-only display changes that can consume a first iOS tap.
+- Keep workspace expand chevrons permanently visible instead of swapping folder/chevron on hover.
+- Preserve original single-click workspace toggle and session navigation handlers; do not simulate double-clicks or alter session history.
+- Disable session-row double-click rename on mobile; row menu actions remain available.
+- Touch fixture covers first-tap toggle/open, action menus, and double-click suppression. Actual iOS/Android and bottom session navigation need user confirmation.
+
 ## 0.1.13 — public release
 
 Includes the Enter-to-dismiss behavior developed in local preview 0.1.12. The user confirmed the combined mobile behavior works (device/browser unspecified).

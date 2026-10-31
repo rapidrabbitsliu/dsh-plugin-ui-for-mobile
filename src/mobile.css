@@ -1,3 +1,12 @@
+/* No hover-only reveal on touch: the first tap must reach the row action. */
+html[data-dsh-mobile] [data-dsh-mobile-row-actions] {
+  display: inline-flex !important; visibility: visible !important; opacity: 1 !important;
+  align-items: center; gap: 4px !important; flex: 0 0 auto;
+}
+html[data-dsh-mobile] [data-dsh-mobile-row-actions] button { min-width: 28px; min-height: 32px; }
+html[data-dsh-mobile] [data-dsh-mobile-sidebar] [data-row-key] { touch-action: manipulation; }
+html[data-dsh-mobile] [data-dsh-mobile-sidebar] [data-row-key^='workspace:'] > span:first-child { display: none !important; }
+html[data-dsh-mobile] [data-dsh-mobile-sidebar] [data-row-key^='workspace:'] > span:nth-child(2) { display: inline-flex !important; }
 /* Prevent browser text inflation, not user zoom or the host's chosen font sizes.
    Separate from narrow-layout activation so phone landscape stays protected. */
 html[data-dsh-mobile-text-sizing], html[data-dsh-mobile-text-sizing] body,
