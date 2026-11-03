@@ -7,7 +7,7 @@ const {chromium}=req(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH || undefined});
 try {
  const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
- await page.setContent(`<meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,#root{height:100%;margin:0}#frame{height:100%;display:grid;grid-template-columns:56px minmax(0,1fr) 0;grid-template-rows:minmax(0,1fr) auto;overflow:hidden;position:relative}#sidebar{background:#eee;overflow:hidden}#center{min-width:0;display:flex;flex-direction:column;overflow:hidden}#messages{flex:1;min-height:0;overflow:auto}#right{position:relative}[data-shell-bottom]{grid-column:1/-1}[data-shell-overlay]{position:absolute;inset:0;pointer-events:none;z-index:20}#editor{min-height:40px;font-size:14px}#sidebar>div{height:100%;box-sizing:border-box}pre{white-space:pre;overflow:auto}</style><div id="root"><div id="frame" data-sidebar-collapsed="true"><div id="sidebar"><div><button id="toggle">导航</button><input placeholder="搜索"></div></div><div id="center"><div id="messages"><pre>${'long_code_'.repeat(100)}</pre>聊天记录</div><div data-composer-card><div><div><div id="editor" contenteditable="true" role="textbox">输入内容</div></div></div><button>发送</button></div><div data-composer-dock><span data-composer-stat="activity"><button aria-label="5 轮 95 步 · 51 tok/s"><svg></svg><span>5 轮 95 步<span>·</span>51 tok/s</span></button></span><span data-composer-stat="usage"><button><svg></svg><span>7.3M tok<span>·</span>缓存命中 32%</span></button></span><span>41%</span></div></div><div id="right" data-rightbar-col></div><div data-shell-bottom></div><div data-shell-overlay></div></div></div>`);
+ await page.setContent(`<meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,#root{height:100%;margin:0}#frame{height:100%;display:grid;grid-template-columns:56px minmax(0,1fr) 0;grid-template-rows:minmax(0,1fr) auto;overflow:hidden;position:relative}#sidebar{background:#eee;overflow:hidden}#center{min-width:0;display:flex;flex-direction:column;overflow:hidden}#messages{flex:1;min-height:0;overflow:auto}#right{position:relative}[data-shell-bottom]{grid-column:1/-1}[data-shell-overlay]{position:absolute;inset:0;pointer-events:none;z-index:20}#editor{min-height:40px;font-size:14px}#sidebar>div{height:100%;box-sizing:border-box}pre{white-space:pre;overflow:auto}</style><div id="root"><div id="frame" data-sidebar-collapsed="true"><div id="sidebar"><div><button id="toggle">导航</button><input placeholder="搜索"></div></div><div id="center"><div id="messages"><pre>${'long_code_'.repeat(100)}</pre>聊天记录</div><div data-composer-card><div><div><div id="editor" contenteditable="true" role="textbox">输入内容</div></div></div><button id="send" aria-label="发送消息">发送</button></div><div data-composer-dock><span data-composer-stat="activity"><button aria-label="5 轮 95 步 · 51 tok/s"><svg></svg><span>5 轮 95 步<span>·</span>51 tok/s</span></button></span><span data-composer-stat="usage"><button><svg></svg><span>7.3M tok<span>·</span>缓存命中 32%</span></button></span><span>41%</span></div></div><div id="right" data-rightbar-col></div><div data-shell-bottom></div><div data-shell-overlay></div></div></div>`);
  await page.evaluate(()=>{
    const fake=new EventTarget(); Object.assign(fake,{height:844,offsetTop:0,scale:1});
    Object.defineProperty(window,'visualViewport',{value:fake,configurable:true});
@@ -22,7 +22,7 @@ try {
    window.disposers=[];
    const ctx={layout:{toggleSidebar(){const el=document.querySelector('#frame');el.toggleAttribute('data-sidebar-collapsed');}},locale:{register(){return ()=>{};}},effect(fn){const stop=fn();if(stop)window.disposers.push(stop);},slots:{inject(name,setup){return setup();},register(options,Component){if(options.name==='conversation.input.right'){
       const actions={captureInsertion(){return {selection:window.getSelection().getRangeAt(0).cloneRange()};},insertText(text,span){const r=span.selection;r.deleteContents();const node=document.createTextNode(text);r.insertNode(node);r.setStartAfter(node);r.collapse(true);const s=window.getSelection();s.removeAllRanges();s.addRange(r);return true;},persistDraft(){window.newlinePersisted=true;}};
-      const node=Component({t:key=>key,inputActions:actions});document.querySelector('[data-composer-card]').append(node);return ()=>node.remove();
+      const saved=effects;effects=[];Component({inputActions:actions});const stops=effects.map(fn=>fn()).filter(Boolean);effects=saved;return ()=>stops.forEach(fn=>fn());
     }render=()=>{for(const stop of cleanups)stop();cleanups=[];effects=[];const host=document.querySelector('[data-shell-overlay]');host.replaceChildren();const node=Component({t:key=>key});if(node)host.append(node);for(const effect of effects){const stop=effect();if(stop)cleanups.push(stop);}};render();return ()=>{for(const stop of cleanups)stop();cleanups=[];render=()=>{};document.querySelector('[data-shell-overlay]').replaceChildren();};}}};
    window.mobileContext=ctx;
    document.querySelector('#toggle').onclick=()=>ctx.layout.toggleSidebar();
@@ -143,41 +143,49 @@ try {
   await session.locator('button').tap();assert.equal(await page.evaluate(()=>window.fixtureMenu),true);
   await page.keyboard.press('Escape');
   await page.waitForFunction(()=>!document.querySelector('#center').inert);
-  // Model the host keymap: successful submission clears the same editor.
   async function enterCase(mode, options={}) {
-    return page.evaluate(async ({mode,options})=>{
-      const e=document.querySelector('#editor');e.setAttribute('data-composer-input','');e.textContent='测试草稿';e.focus();
-      const host=event=>{event.preventDefault();if(mode==='sent')e.textContent='';};
-      e.addEventListener('keydown',host,{once:true});
-      e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...options}));
-      await Promise.resolve();await Promise.resolve();
-      return document.activeElement===e;
-    },{mode,options});
-  }
-  assert.equal(await enterCase('sent'),false);
-  assert.equal(await enterCase('blocked'),true);
-  await page.evaluate(()=>{const e=document.querySelector('#editor');e.textContent='异步发送';e.focus();e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));});
-  await page.evaluate(()=>{document.querySelector('#editor').textContent='';});
-  await page.waitForFunction(()=>document.activeElement!==document.querySelector('#editor'));
-  assert.equal(await enterCase('blocked'),true);
-  assert.equal(await enterCase('completion'),true);
-  assert.equal(await enterCase('sent',{shiftKey:true}),true);
-  assert.equal(await enterCase('sent',{isComposing:true}),true);
-  assert.equal(await enterCase('sent',{keyCode:229}),true);
-  assert.equal(await enterCase('sent',{repeat:true}),true);
-  await page.evaluate(()=>{document.querySelector('#editor').dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));});
-  assert.equal(await enterCase('sent'),true);
-  await page.evaluate(()=>{document.querySelector('#editor').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}));});
-  assert.equal(await enterCase('sent'),true);
-  await page.clock.runFor(30);
-  await page.evaluate(()=>{const e=document.querySelector('#editor');e.textContent='甲乙';e.focus();const r=document.createRange();r.setStart(e.firstChild,1);r.collapse(true);const s=getSelection();s.removeAllRanges();s.addRange(r);});
-  assert.equal(await page.locator('.dsh-mobile-newline').isVisible(),true);
-  await page.locator('.dsh-mobile-newline').dispatchEvent('pointerdown',{button:0,isPrimary:true,pointerType:'touch'});
-  await page.locator('.dsh-mobile-newline').dispatchEvent('click',{detail:1});
-  assert.equal(await page.locator('#editor').textContent(),'甲\n乙');
-  assert.equal(await page.locator('#editor').evaluate(e=>document.activeElement===e),true);
-  assert.equal(await page.evaluate(()=>window.newlinePersisted),true);
-  // A phone's landscape width crosses 767px: only layout deactivates,
+     return page.evaluate(({mode,options})=>{
+       const e=document.querySelector('#editor');e.setAttribute('data-composer-input','');e.textContent='甲乙';e.focus();
+       const r=document.createRange();r.setStart(e.firstChild,1);r.collapse(true);const sel=getSelection();sel.removeAllRanges();sel.addRange(r);
+       let hostCalled=false;
+       const host=event=>{hostCalled=true;event.preventDefault();};
+       e.addEventListener('keydown',host);
+       e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...options}));
+       e.removeEventListener('keydown',host);
+       return {focus:document.activeElement===e,text:e.textContent,hostCalled};
+     },{mode,options});
+   }
+   assert.deepEqual(await enterCase('newline'),{focus:true,text:'甲\n乙',hostCalled:false});
+   assert.equal(await page.evaluate(()=>window.newlinePersisted),true);
+   for(const options of [{shiftKey:true},{ctrlKey:true},{isComposing:true},{keyCode:229}]) {
+     assert.deepEqual(await enterCase('pass',options),{focus:true,text:'甲乙',hostCalled:true});
+   }
+   await page.evaluate(()=>document.querySelector('#editor').setAttribute('aria-activedescendant','candidate'));
+   assert.equal((await enterCase('completion')).hostCalled,true);
+   await page.evaluate(()=>document.querySelector('#editor').removeAttribute('aria-activedescendant'));
+   await page.evaluate(()=>document.querySelector('#editor').dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})));
+   assert.equal((await enterCase('composition')).hostCalled,true);
+   await page.evaluate(()=>document.querySelector('#editor').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})));
+   assert.equal((await enterCase('composition-end')).hostCalled,true);
+   await page.clock.runFor(30);
+   assert.equal((await enterCase('repeat',{repeat:true})).text,'甲\n乙');
+   assert.equal(await page.locator('.dsh-mobile-newline').count(),0);
+   async function sendCase(clear=true,label='发送消息') {
+     return page.evaluate(async ({clear,label})=>{
+       const e=document.querySelector('#editor'),b=document.querySelector('#send');
+       e.textContent='发送草稿';e.focus();b.setAttribute('aria-label',label);
+       b.onclick=()=>{if(clear)e.textContent='';};b.click();
+       await Promise.resolve();await Promise.resolve();return document.activeElement===e;
+     },{clear,label});
+   }
+   assert.equal(await sendCase(),false);
+   assert.equal(await sendCase(false),true);
+   assert.equal(await sendCase(true,'停止'),true);
+   for(const label of ['排队发送','插话发送','Send message','Queue message','Steer message']) assert.equal(await sendCase(true,label),false);
+   await sendCase(false);
+   await page.evaluate(()=>{document.querySelector('#editor').textContent='';});
+   await page.waitForFunction(()=>document.activeElement!==document.querySelector('#editor'));
+   // A phone's landscape width crosses 767px: only layout deactivates,
   // text inflation prevention must survive and protect the same message nodes.
   const messageNode=await page.locator('#messages').elementHandle();
   const fontBefore=await page.locator('#messages').evaluate(e=>getComputedStyle(e).fontSize);
@@ -192,11 +200,27 @@ try {
     assert.equal(await messageNode.evaluate(e=>e===document.querySelector('#messages')),true);
   }
   await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>!document.documentElement.hasAttribute('data-dsh-mobile'));
-  assert.equal(await page.locator('.dsh-mobile-newline').isVisible(),false);
-  assert.equal(await enterCase('sent'),true);
+  assert.equal(await page.locator('.dsh-mobile-newline').count(),0);
+  assert.equal((await enterCase('desktop')).hostCalled,true);
+   assert.equal(await sendCase(),true);
  await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>document.documentElement.hasAttribute('data-dsh-mobile'));
- await page.evaluate(()=>{document.documentElement.style.setProperty('--unrelated-theme','kept');for(const stop of window.disposers.reverse())stop();});
- assert.equal(await page.locator('[data-dsh-mobile-style]').count(),0);
+ assert.equal(await page.locator('meta[name="apple-mobile-web-app-status-bar-style"]').count(),0);
+  await page.evaluate(()=>{
+    Object.defineProperty(navigator,'standalone',{configurable:true,value:true});
+    const meta=document.createElement('meta');meta.name='apple-mobile-web-app-status-bar-style';meta.content='black-translucent';document.head.append(meta);
+    const theme=document.createElement('meta');theme.name='theme-color';theme.content='#123456';document.head.append(theme);
+    document.body.style.backgroundColor='rgb(20, 20, 20)';document.body.setAttribute('data-ds-dark-theme','');
+  });
+  await page.waitForFunction(()=>document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content==='black');
+  assert.equal(await page.locator('html').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(20, 20, 20)');
+  assert.equal(await page.locator('meta[name="theme-color"]').getAttribute('content'),'#123456');
+  await page.evaluate(()=>{document.body.removeAttribute('data-ds-dark-theme');document.body.style.backgroundColor='rgb(250, 250, 250)';});
+  await page.waitForFunction(()=>document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content==='default');
+  assert.equal(await page.locator('html').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(250, 250, 250)');
+  await page.evaluate(()=>{document.documentElement.style.setProperty('--unrelated-theme','kept');for(const stop of window.disposers.reverse())stop();});
+ assert.equal(await page.locator('meta[name="apple-mobile-web-app-status-bar-style"]').getAttribute('content'),'black-translucent');
+  assert.equal(await page.locator('[data-dsh-mobile-standalone]').count(),0);
+  assert.equal(await page.locator('[data-dsh-mobile-style]').count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.hasAttribute('data-dsh-mobile-text-sizing')),false);
  assert.equal(await page.locator('[data-dsh-mobile-frame]').count(),0);
  assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--unrelated-theme')),'kept');

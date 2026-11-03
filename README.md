@@ -10,10 +10,12 @@
 
 | 版本 | 范围 |
 | --- | --- |
-| **0.1.14：本次发行版本** | 侧栏工作区箭头和行操作按钮常显；取消移动端会话标题双击重命名；完整更新功能与操作文档 |
+| **0.1.16：本次发行版本** | 在主屏幕独立模式补充 Apple 状态栏样式，根画布跟随 DSH 背景；包含 0.1.15 输入改动 |
+| **0.1.15：本地中间版，已合入 0.1.16** | 普通回车换行且保持输入；点击发送后收键盘；移除独立换行按钮 |
+| **0.1.14：上一正式版本** | 侧栏工作区箭头和行操作按钮常显；取消移动端会话标题双击重命名；完整更新功能与操作文档 |
 | **0.1.13：上一正式版本** | 回车发送后收键盘、移动端「↵」换行按钮，以及此前的布局、动画、顶部和横竖屏字体修复 |
 
-下文功能以 0.1.14 为准。渠道是否已公开可用请以 [GitHub Releases](https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile/releases) 和 npm registry 实际状态为准；发布请求受理不等于立即可下载。历史变更见 [CHANGELOG.md](./CHANGELOG.md)。
+下文以 0.1.16 为准，包含此前未公开的 0.1.15 输入改动。**iOS 主屏幕状态栏明暗跟随仍不稳定，不属于已修复项。**渠道是否已公开可用请以 [GitHub Releases](https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile/releases) 和 npm registry 实际状态为准；发布请求受理不等于立即可下载。历史变更见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ## 安装与升级
 
@@ -26,13 +28,13 @@ dsh plugin --profile web add dsh-plugin-ui-for-mobile
 指定已发布版本：
 
 ```sh
-dsh plugin --profile web add dsh-plugin-ui-for-mobile@0.1.14
+dsh plugin --profile web add dsh-plugin-ui-for-mobile@0.1.16
 ```
 
 也可以从 [GitHub Releases](https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile/releases) 下载安装包：
 
 ```sh
-dsh plugin --profile web add ./dsh-plugin-ui-for-mobile-0.1.14.tgz
+dsh plugin --profile web add ./dsh-plugin-ui-for-mobile-0.1.16.tgz
 ```
 
 - 将 `web` 替换为实际运行 DSH Web 的 profile。
@@ -78,12 +80,12 @@ dsh plugin --profile web add dsh-plugin-ui-for-mobile
 - 根据 `visualViewport` 的可见高度和偏移调整布局，缓解软键盘遮挡输入区的问题。
 - 限制长草稿高度，保留输入区内部滚动，并处理底部安全区。
 - 输入框和搜索框等使用 16px 文字，减少 iOS 聚焦输入时意外放大。
-- **键盘普通回车**：仍由 DSH 处理发送；插件在观察到草稿被清空后让输入框失焦，请求收起软键盘。
-- **移动端专用「↵」按钮**：在当前光标或选区位置插入换行，不发送消息，保留输入焦点；使用 DSH 的公开文本插入与草稿持久化接口，不直接重写编辑器内容。
-- 中文输入法确认候选词、修饰键回车、连续按住回车、补全选择及保留草稿的受阻发送不会被当作普通发送后失焦。
-- 有实体键盘时，Shift+Enter 仍遵循 DSH 原有换行逻辑；手机无需依赖 Shift，直接使用「↵」。
+- **0.1.16 起：键盘普通回车只换行**，在当前光标或选区位置插入换行并持久化草稿，不发送、不失焦，保持连续输入；已移除单独的「↵」按钮。
+- **点击输入框右下角发送按钮**：由 DSH 正常发送；观察到草稿清空后失焦，请求收起软键盘。排队发送、插话发送也适用；停止按钮不触发插件收键盘。
+- 中文输入法选词、候选补全及修饰键回车仍交给宿主处理；Shift+Enter 保留原换行逻辑。桌面宽度不改变原有回车发送行为。
+- 通过 DSH 公开文本插入与草稿接口换行，不直接修改编辑器 DOM，也不模拟发送。
 
-自动失焦只覆盖窄屏聊天编辑器的普通回车，**不是所有按钮或所有发送入口的通用“收键盘”设置**。草稿清空检测窗口为 1.5 秒，键盘最终行为仍受浏览器和系统控制。
+自动失焦仅由窄屏聊天区发送按钮的点击触发，不覆盖其他发送入口；受阻发送保留草稿时不主动失焦。草稿清空检测窗口为 1.5 秒，键盘最终行为仍受浏览器和系统控制。本次键盘改动尚待真实手机验收；0.1.14 及更早版本仍是回车发送＋独立换行按钮。
 
 ### 4. 横竖屏文字大小保护
 
@@ -91,6 +93,13 @@ dsh plugin --profile web add dsh-plugin-ui-for-mobile
 - 手机横屏超过窄屏布局断点时，文字保护仍可保持启用。
 - 不固定聊天历史字号，不禁用用户主动双指缩放，也不靠重建消息恢复字号。
 - **这不是方向锁定**：插件不会阻止系统横竖屏切换，也不安装或修改 PWA Manifest。
+
+### iOS 主屏幕状态栏（实验性，存在已知问题）
+
+- 独立运行模式下，Apple 状态栏样式随 DSH 解析后的主题设置为深色 `black` 或浅色 `default`；根画布背景使用 DSH 当前 body 背景色。沿用宿主已有 `theme-color`，不添加冲突副本。
+- 保留不透明状态栏及原安全视口，不使用 `black-translucent`，不把内容拉到时间、电量下面；系统栏本身只有 iOS 提供的样式，不能保证与自定义主题颜色逐像素一致。
+- iOS 可能只在启动时读取配置。安装后先完全退出主屏幕 Web App 再打开；如果白条未变化，可在 Safari 刷新后重新添加到主屏幕。客户端插件不能保证首次启动闪屏或已有快捷方式缓存立即更新。
+- 模拟测试覆盖明暗切换与停用还原；用户实测状态栏明暗跟随时好时坏，暗色 DSH 顶部仍可能亮色；刷新或重开不保证解决。此问题未修复。未添加 Manifest、离线能力或方向锁定。
 
 ### 5. 紧凑顶部与统计
 
@@ -123,8 +132,8 @@ dsh plugin --profile web add dsh-plugin-ui-for-mobile
 | 打开工作区／会话侧栏 | 点左边缘像素角色 |
 | 关闭侧栏 | 点侧栏外的遮罩 |
 | 移动角色 | 拖动，松手后回到左边缘并记住高度 |
-| 输入换行但不发送 | 点输入区「↵」按钮 |
-| 用键盘发送并收起键盘 | 普通回车；发送清空草稿后自动失焦 |
+| 输入换行但不发送（0.1.16 起） | 软键盘普通回车，保持输入 |
+| 发送并收起键盘（0.1.16 起） | 点输入框右下角发送按钮，草稿清空后失焦 |
 | 查看子智能体／后台任务 | 点顶部带边框的图标＋数字 |
 | 查看统计详情 | 使用原统计入口；视觉文字已缩短 |
 | 会话重命名（0.1.14 起） | 使用会话右侧操作菜单，不再双击标题 |
@@ -142,8 +151,8 @@ dsh plugin --profile web add dsh-plugin-ui-for-mobile
 ### 已验证到什么程度
 
 - Node 单元测试覆盖视口几何、统计缩写和角色动作时间线。
-- Chrome 模拟 shell 回归覆盖布局、侧栏、拖动、动画／粒子清理、减少动态效果、设置、顶部边界、横竖屏、回车失焦和换行按钮等。
-- 用户已在手机上确认横竖屏文字修复、换行按钮、回车收键盘，以及 0.1.14 的侧栏首次点按和底部会话栏同步；设备及浏览器型号未记录。
+- Chrome 模拟 shell 回归覆盖布局、侧栏、拖动、动画／粒子清理、减少动态效果、设置、顶部边界、横竖屏、回车光标处换行、发送按钮触发失焦和独立模式主题元数据等。
+- 用户此前已在手机上确认横竖屏文字修复、旧版换行按钮／回车收键盘，以及 0.1.14 的侧栏首次点按和底部会话栏同步；设备及浏览器型号未记录。
 - 用户实测不等于完整设备覆盖；独立的已认证 DSH 页面自动化和完整 iOS／Android 设备矩阵仍未完成验证。
 
 遇到问题请在 [Issues](https://github.com/rapidrabbitsliu/dsh-plugin-ui-for-mobile/issues) 提供 DSH 版本、浏览器／系统、窗口尺寸、是否从主屏幕打开，以及复现步骤。
@@ -168,9 +177,9 @@ npm pack
 ```
 
 - [src/mobile.mjs](./src/mobile.mjs)：移动布局、统计／顶部／侧栏 DOM 适配、视口与发送后失焦。
-- [src/mobile.css](./src/mobile.css)：窄屏样式、设置、顶部、换行按钮与文字放大保护。
+- [src/mobile.css](./src/mobile.css)：窄屏样式、设置、顶部、独立模式根背景与文字放大保护。
 - [src/mascot.mjs](./src/mascot.mjs)：拖动、位置记忆、闲置动作和粒子生命周期。
-- [scripts/build.mjs](./scripts/build.mjs)：注册 DSH 插槽、使用公开 API 的换行按钮、嵌入 PNG 资源并生成 [client.js](./client.js)。修改这些输入后须重新构建。
+- [scripts/build.mjs](./scripts/build.mjs)：注册 DSH 插槽、为回车换行提供公开输入 API 的无 UI 桥接、嵌入 PNG 资源并生成 [client.js](./client.js)。修改这些输入后须重新构建。
 - React 由 DSH 模块表提供，模块 ID 必须与包名及 patch 一致；角色无需额外素材服务器。
 
 可选浏览器回归依赖本机已有 Playwright 和 Chromium：
@@ -189,15 +198,15 @@ Independent mobile Web compatibility plugin for DSH: no DSH source changes, no s
 
 - Full-width chat, overlay sidebar, draggable pixel chibi whale-maid navigation with persistent height, blinks, waves, playful idle effects and a sixteen-pose apple scene. Respects reduced-motion preferences.
 - VisualViewport keyboard handling, bounded draft height, safe areas, 16px inputs, horizontal overflow containment and text auto-inflation prevention across phone rotation. User pinch zoom remains available.
-- Mobile-only **↵** inserts a line break through the host's public input API. Plain Enter blurs the composer after the host clears the draft; IME/modifier and blocked-send exclusions retain focus.
+- **Since 0.1.16 (includes local 0.1.15):** plain mobile Enter inserts a line break through the host public input API and keeps focus. Only clicking the composer send button arms blur after draft clearing; the separate ↵ button is removed. IME/completion/modifier handling remains with the host. Real-phone verification of this change is pending; 0.1.14 retains the previous behavior.
 - Outlined icon-and-count subagent/job triggers, tighter header spacing, compact statistics and full-screen mobile settings.
 - **Since 0.1.14:** always-visible sidebar action strips/expand chevrons and suppression of session-title double-click rename; original single-click handlers and menu rename remain. The user confirmed first-tap behavior and bottom session-bar synchronization on their phone.
 
-Release target: **0.1.14** (previous release: 0.1.13). Check GitHub Releases and the npm registry for actual channel availability; accepted publication may take time to become publicly downloadable. Installation commands above use the existing DSH Web profile. Refresh after installation; restart the original instance only if needed.
+Release target: **0.1.16**. Experimental standalone chrome writes Apple black/default status-bar metadata and a theme-matched root canvas while preserving host theme-color. **User testing found iOS status-bar theme following intermittent: dark DSH can still have a light status bar. This is NOT fixed; refresh/reopen is not a guaranteed workaround.** No translucent content-under-status-bar layout is used. Check GitHub Releases and npm for actual availability. Use the active Web profile and refresh the original page after installation.
 
 Layout applies at ≤767 CSS px in supported Web shells, not native desktop shells. Text sizing protection also covers coarse-pointer landscape windows with height ≤767 CSS px. This is a DOM/CSS adapter statically checked against DSH 0.2.1-rc.3, not a stable cross-version layout API. No orientation lock, offline support or PWA/native packaging is provided. Model/attachment focus behavior remains a known limitation.
 
-Automated tests use a simulated shell/viewport, not a full authenticated DSH or native iOS/Android keyboard matrix. User mobile verification covers rotation text sizing, the newline/keyboard combination, sidebar first-tap behavior and bottom session-bar synchronization. Artwork is unofficial AI-generated reference-derived material; see [provenance and rights limitations](./assets/README.md).
+Automated tests use a simulated shell/viewport, not a full authenticated DSH or native iOS/Android keyboard matrix. Previous-version user mobile verification covers rotation text sizing, the old newline/keyboard combination, sidebar first-tap behavior and bottom session-bar synchronization. Artwork is unofficial AI-generated reference-derived material; see [provenance and rights limitations](./assets/README.md).
 
 ## License
 

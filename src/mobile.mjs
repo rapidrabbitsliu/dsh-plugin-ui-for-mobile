@@ -1,5 +1,56 @@
 export const BREAKPOINT = 767;
 
+// iOS home-screen chrome reads Apple metadata separately from theme-color.
+// Use opaque styles (never black-translucent), preserving the existing safe
+// viewport: no content is moved underneath system time/battery indicators.
+export function installStandaloneChrome(win) {
+  const doc = win.document, html = doc.documentElement;
+  const standalone = win.matchMedia('(display-mode: standalone)');
+  const phone = win.matchMedia('(max-width: 767px), (pointer: coarse) and (max-height: 767px)');
+  const saved = new Map();
+  let created = null, active = false;
+  const oldBackground = html.style.getPropertyValue('--dsh-mobile-chrome-background');
+  const oldPriority = html.style.getPropertyPriority('--dsh-mobile-chrome-background');
+  const oldMarker = html.getAttribute('data-dsh-mobile-standalone');
+  function reset() {
+    if (!active) return;
+    for (const [meta, content] of saved) {
+      if (content === null) meta.removeAttribute('content'); else meta.setAttribute('content', content);
+    }
+    saved.clear(); created?.remove(); created = null;
+    if (oldMarker === null) html.removeAttribute('data-dsh-mobile-standalone'); else html.setAttribute('data-dsh-mobile-standalone', oldMarker);
+    if (oldBackground) html.style.setProperty('--dsh-mobile-chrome-background', oldBackground, oldPriority);
+    else html.style.removeProperty('--dsh-mobile-chrome-background');
+    active = false;
+  }
+  function sync() {
+    const native = html.hasAttribute('data-platform') || html.hasAttribute('data-windows-titlebar');
+    if (native || !phone.matches || !(standalone.matches || win.navigator.standalone === true)) { reset(); return; }
+    active = true;
+    const dark = doc.body.hasAttribute('data-ds-dark-theme') || win.getComputedStyle(html).colorScheme === 'dark';
+    let metas = [...doc.head.querySelectorAll('meta[name="apple-mobile-web-app-status-bar-style"]')];
+    if (!metas.length) {
+      created = doc.createElement('meta'); created.name = 'apple-mobile-web-app-status-bar-style';
+      doc.head.append(created); metas = [created];
+    }
+    for (const meta of metas) {
+      if (meta !== created && !saved.has(meta)) saved.set(meta, meta.getAttribute('content'));
+      const content = dark ? 'black' : 'default';
+      if (meta.content !== content) meta.content = content;
+    }
+    const background = win.getComputedStyle(doc.body).backgroundColor;
+    if (html.style.getPropertyValue('--dsh-mobile-chrome-background') !== background) html.style.setProperty('--dsh-mobile-chrome-background', background);
+    if (!html.hasAttribute('data-dsh-mobile-standalone')) html.setAttribute('data-dsh-mobile-standalone', '');
+  }
+  const observer = new win.MutationObserver(sync);
+  observer.observe(html, {attributes: true, attributeFilter: ['style', 'class', 'data-ds-theme-source', 'data-platform', 'data-windows-titlebar']});
+  observer.observe(doc.body, {attributes: true, attributeFilter: ['style', 'class', 'data-ds-dark-theme']});
+  standalone.addEventListener('change', sync); phone.addEventListener('change', sync);
+  win.addEventListener('pageshow', sync);
+  sync();
+  return () => { observer.disconnect(); standalone.removeEventListener('change', sync); phone.removeEventListener('change', sync); win.removeEventListener('pageshow', sync); reset(); };
+}
+
 export function compactStat(text) {
   return text.replace(/(\d[\d,.]*)\s*(?:轮|turns?)/gi, '$1r')
     .replace(/(\d[\d,.]*)\s*(?:步|steps?)/gi, '$1s')
@@ -45,6 +96,7 @@ export function installMobile(ctx, css, win = window) {
   style.setAttribute('data-dsh-mobile-style', '');
   style.textContent = css;
   doc.head.append(style);
+  const stopStandaloneChrome = installStandaloneChrome(win);
 
   function remember(el, name) {
     let attrs = originals.get(el);
@@ -124,6 +176,9 @@ export function installMobile(ctx, css, win = window) {
       }
     }
     publish(expanded);
+    for (const editor of center.querySelectorAll('[data-composer-input][contenteditable="true"]')) {
+      attr(editor, 'enterkeyhint', 'enter');
+    }
     // Keep hover-revealed action strips permanently laid out on touch screens.
     // iOS may consume the first tap to reveal display:none hover descendants.
     for (const row of sidebar.querySelectorAll('[data-row-key]')) {
@@ -206,8 +261,7 @@ export function installMobile(ctx, css, win = window) {
     const editor = pendingSubmit;
     if (!editor) return;
     if (!active || !editor.isConnected || doc.activeElement !== editor) { clearPendingSubmit(); return; }
-    // A prevented Enter alone also means completion selection or blocked send.
-    // Only dismiss after the host actually consumes/clears the draft.
+    // Only a send-button click arms this; dismiss after the host clears the draft.
     if (!(editor.textContent ?? '').replace(/[\s\u200b]/g, '') && !editor.querySelector('[data-composer-text-ref]')) {
       clearPendingSubmit();
       editor.blur();
@@ -219,18 +273,33 @@ export function installMobile(ctx, css, win = window) {
       clearPendingSubmit();
     }
   }
+  let inputActions = null;
   function composerEnter(event) {
     clearPendingSubmit();
     const editor = event.target?.closest?.('[data-composer-input][contenteditable="true"]');
     if (!active || !editor || !center?.contains(editor) || event.key !== 'Enter'
-      || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || event.repeat
+      || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
       || event.isComposing || event.keyCode === 229 || Date.now() < compositionUntil
       || editor.hasAttribute('data-composer-composing')
-      || !(editor.textContent ?? '').trim()
-      || editor.hasAttribute('aria-activedescendant')) return;
+      || editor.hasAttribute('aria-activedescendant') || !inputActions) return;
+    // Consume the plain Enter before Lexical's submit keymap. Public insertion
+    // preserves selection/undo and draft persistence, including an empty draft.
+    event.preventDefault();
+    event.stopPropagation();
+    if (inputActions.insertText('\n', inputActions.captureInsertion())) {
+      inputActions.persistDraft();
+    }
+  }
+  function composerSend(event) {
+    clearPendingSubmit();
+    if (!active) return;
+    const button = event.target?.closest?.('[data-composer-card] button');
+    if (!button || !center?.contains(button) || button.disabled
+      || !/^(发送消息|排队发送|插话发送|Send message|Queue message|Steer message)$/.test(button.getAttribute('aria-label') ?? '')) return;
+    const editor = button.closest('[data-composer-card]').querySelector('[data-composer-input][contenteditable="true"]');
+    if (!editor || doc.activeElement !== editor) return;
     pendingSubmit = editor;
     submitTimer = win.setTimeout(clearPendingSubmit, 1500);
-    // Run after Lexical/React's original key handlers; never consume the event.
     win.queueMicrotask(() => { if (!disposed) checkSubmitted(); });
   }
   function keydown(event) {
@@ -254,12 +323,17 @@ export function installMobile(ctx, css, win = window) {
   doc.addEventListener('keydown', keydown);
   doc.addEventListener('dblclick', sidebarDoubleClick, true);
   doc.addEventListener('keydown', composerEnter, true);
+  doc.addEventListener('click', composerSend, true);
   doc.addEventListener('compositionstart', composition, true);
   doc.addEventListener('compositionend', composition, true);
   sync();
   return {
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     getSnapshot() { return navigation; },
+    setInputActions(actions) {
+      inputActions = actions;
+      return () => { if (inputActions === actions) inputActions = null; };
+    },
     toggle() { if (active) ctx.layout.toggleSidebar(); },
     close,
     dispose() {
@@ -278,9 +352,11 @@ export function installMobile(ctx, css, win = window) {
       doc.removeEventListener('keydown', keydown);
       doc.removeEventListener('dblclick', sidebarDoubleClick, true);
       doc.removeEventListener('keydown', composerEnter, true);
+      doc.removeEventListener('click', composerSend, true);
+      inputActions = null;
       doc.removeEventListener('compositionstart', composition, true);
       doc.removeEventListener('compositionend', composition, true);
-      restore(); style.remove(); listeners.clear();
+      restore(); stopStandaloneChrome(); style.remove(); listeners.clear();
     },
   };
 }

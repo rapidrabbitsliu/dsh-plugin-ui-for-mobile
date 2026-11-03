@@ -5,6 +5,57 @@ window.__ModuleLoader__.load({
     const React = require('react');
 const BREAKPOINT = 767;
 
+// iOS home-screen chrome reads Apple metadata separately from theme-color.
+// Use opaque styles (never black-translucent), preserving the existing safe
+// viewport: no content is moved underneath system time/battery indicators.
+function installStandaloneChrome(win) {
+  const doc = win.document, html = doc.documentElement;
+  const standalone = win.matchMedia('(display-mode: standalone)');
+  const phone = win.matchMedia('(max-width: 767px), (pointer: coarse) and (max-height: 767px)');
+  const saved = new Map();
+  let created = null, active = false;
+  const oldBackground = html.style.getPropertyValue('--dsh-mobile-chrome-background');
+  const oldPriority = html.style.getPropertyPriority('--dsh-mobile-chrome-background');
+  const oldMarker = html.getAttribute('data-dsh-mobile-standalone');
+  function reset() {
+    if (!active) return;
+    for (const [meta, content] of saved) {
+      if (content === null) meta.removeAttribute('content'); else meta.setAttribute('content', content);
+    }
+    saved.clear(); created?.remove(); created = null;
+    if (oldMarker === null) html.removeAttribute('data-dsh-mobile-standalone'); else html.setAttribute('data-dsh-mobile-standalone', oldMarker);
+    if (oldBackground) html.style.setProperty('--dsh-mobile-chrome-background', oldBackground, oldPriority);
+    else html.style.removeProperty('--dsh-mobile-chrome-background');
+    active = false;
+  }
+  function sync() {
+    const native = html.hasAttribute('data-platform') || html.hasAttribute('data-windows-titlebar');
+    if (native || !phone.matches || !(standalone.matches || win.navigator.standalone === true)) { reset(); return; }
+    active = true;
+    const dark = doc.body.hasAttribute('data-ds-dark-theme') || win.getComputedStyle(html).colorScheme === 'dark';
+    let metas = [...doc.head.querySelectorAll('meta[name="apple-mobile-web-app-status-bar-style"]')];
+    if (!metas.length) {
+      created = doc.createElement('meta'); created.name = 'apple-mobile-web-app-status-bar-style';
+      doc.head.append(created); metas = [created];
+    }
+    for (const meta of metas) {
+      if (meta !== created && !saved.has(meta)) saved.set(meta, meta.getAttribute('content'));
+      const content = dark ? 'black' : 'default';
+      if (meta.content !== content) meta.content = content;
+    }
+    const background = win.getComputedStyle(doc.body).backgroundColor;
+    if (html.style.getPropertyValue('--dsh-mobile-chrome-background') !== background) html.style.setProperty('--dsh-mobile-chrome-background', background);
+    if (!html.hasAttribute('data-dsh-mobile-standalone')) html.setAttribute('data-dsh-mobile-standalone', '');
+  }
+  const observer = new win.MutationObserver(sync);
+  observer.observe(html, {attributes: true, attributeFilter: ['style', 'class', 'data-ds-theme-source', 'data-platform', 'data-windows-titlebar']});
+  observer.observe(doc.body, {attributes: true, attributeFilter: ['style', 'class', 'data-ds-dark-theme']});
+  standalone.addEventListener('change', sync); phone.addEventListener('change', sync);
+  win.addEventListener('pageshow', sync);
+  sync();
+  return () => { observer.disconnect(); standalone.removeEventListener('change', sync); phone.removeEventListener('change', sync); win.removeEventListener('pageshow', sync); reset(); };
+}
+
 function compactStat(text) {
   return text.replace(/(\d[\d,.]*)\s*(?:轮|turns?)/gi, '$1r')
     .replace(/(\d[\d,.]*)\s*(?:步|steps?)/gi, '$1s')
@@ -50,6 +101,7 @@ function installMobile(ctx, css, win = window) {
   style.setAttribute('data-dsh-mobile-style', '');
   style.textContent = css;
   doc.head.append(style);
+  const stopStandaloneChrome = installStandaloneChrome(win);
 
   function remember(el, name) {
     let attrs = originals.get(el);
@@ -129,6 +181,9 @@ function installMobile(ctx, css, win = window) {
       }
     }
     publish(expanded);
+    for (const editor of center.querySelectorAll('[data-composer-input][contenteditable="true"]')) {
+      attr(editor, 'enterkeyhint', 'enter');
+    }
     // Keep hover-revealed action strips permanently laid out on touch screens.
     // iOS may consume the first tap to reveal display:none hover descendants.
     for (const row of sidebar.querySelectorAll('[data-row-key]')) {
@@ -211,8 +266,7 @@ function installMobile(ctx, css, win = window) {
     const editor = pendingSubmit;
     if (!editor) return;
     if (!active || !editor.isConnected || doc.activeElement !== editor) { clearPendingSubmit(); return; }
-    // A prevented Enter alone also means completion selection or blocked send.
-    // Only dismiss after the host actually consumes/clears the draft.
+    // Only a send-button click arms this; dismiss after the host clears the draft.
     if (!(editor.textContent ?? '').replace(/[\s\u200b]/g, '') && !editor.querySelector('[data-composer-text-ref]')) {
       clearPendingSubmit();
       editor.blur();
@@ -224,18 +278,33 @@ function installMobile(ctx, css, win = window) {
       clearPendingSubmit();
     }
   }
+  let inputActions = null;
   function composerEnter(event) {
     clearPendingSubmit();
     const editor = event.target?.closest?.('[data-composer-input][contenteditable="true"]');
     if (!active || !editor || !center?.contains(editor) || event.key !== 'Enter'
-      || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || event.repeat
+      || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
       || event.isComposing || event.keyCode === 229 || Date.now() < compositionUntil
       || editor.hasAttribute('data-composer-composing')
-      || !(editor.textContent ?? '').trim()
-      || editor.hasAttribute('aria-activedescendant')) return;
+      || editor.hasAttribute('aria-activedescendant') || !inputActions) return;
+    // Consume the plain Enter before Lexical's submit keymap. Public insertion
+    // preserves selection/undo and draft persistence, including an empty draft.
+    event.preventDefault();
+    event.stopPropagation();
+    if (inputActions.insertText('\n', inputActions.captureInsertion())) {
+      inputActions.persistDraft();
+    }
+  }
+  function composerSend(event) {
+    clearPendingSubmit();
+    if (!active) return;
+    const button = event.target?.closest?.('[data-composer-card] button');
+    if (!button || !center?.contains(button) || button.disabled
+      || !/^(发送消息|排队发送|插话发送|Send message|Queue message|Steer message)$/.test(button.getAttribute('aria-label') ?? '')) return;
+    const editor = button.closest('[data-composer-card]').querySelector('[data-composer-input][contenteditable="true"]');
+    if (!editor || doc.activeElement !== editor) return;
     pendingSubmit = editor;
     submitTimer = win.setTimeout(clearPendingSubmit, 1500);
-    // Run after Lexical/React's original key handlers; never consume the event.
     win.queueMicrotask(() => { if (!disposed) checkSubmitted(); });
   }
   function keydown(event) {
@@ -259,12 +328,17 @@ function installMobile(ctx, css, win = window) {
   doc.addEventListener('keydown', keydown);
   doc.addEventListener('dblclick', sidebarDoubleClick, true);
   doc.addEventListener('keydown', composerEnter, true);
+  doc.addEventListener('click', composerSend, true);
   doc.addEventListener('compositionstart', composition, true);
   doc.addEventListener('compositionend', composition, true);
   sync();
   return {
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     getSnapshot() { return navigation; },
+    setInputActions(actions) {
+      inputActions = actions;
+      return () => { if (inputActions === actions) inputActions = null; };
+    },
     toggle() { if (active) ctx.layout.toggleSidebar(); },
     close,
     dispose() {
@@ -283,9 +357,11 @@ function installMobile(ctx, css, win = window) {
       doc.removeEventListener('keydown', keydown);
       doc.removeEventListener('dblclick', sidebarDoubleClick, true);
       doc.removeEventListener('keydown', composerEnter, true);
+      doc.removeEventListener('click', composerSend, true);
+      inputActions = null;
       doc.removeEventListener('compositionstart', composition, true);
       doc.removeEventListener('compositionend', composition, true);
-      restore(); style.remove(); listeners.clear();
+      restore(); stopStandaloneChrome(); style.remove(); listeners.clear();
     },
   };
 }
@@ -397,11 +473,11 @@ function installMascot(button, frames, win = window) {
       inject: ['slots', 'layout', 'locale'],
       apply(ctx) {
         ctx.effect(() => ctx.locale.register('mobileUi', {
-          zh: {close: '关闭侧边栏', open: '打开会话侧边栏', newline: '换行'},
-          en: {close: 'Close sidebar', open: 'Open conversation sidebar', newline: 'Insert line break'},
+          zh: {close: '关闭侧边栏', open: '打开会话侧边栏'},
+          en: {close: 'Close sidebar', open: 'Open conversation sidebar'},
         }));
         ctx.effect(() => {
-          const adapter = installMobile(ctx, "/* No hover-only reveal on touch: the first tap must reach the row action. */\nhtml[data-dsh-mobile] [data-dsh-mobile-row-actions] {\n  display: inline-flex !important; visibility: visible !important; opacity: 1 !important;\n  align-items: center; gap: 4px !important; flex: 0 0 auto;\n}\nhtml[data-dsh-mobile] [data-dsh-mobile-row-actions] button { min-width: 28px; min-height: 32px; }\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] [data-row-key] { touch-action: manipulation; }\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] [data-row-key^='workspace:'] > span:first-child { display: none !important; }\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] [data-row-key^='workspace:'] > span:nth-child(2) { display: inline-flex !important; }\n/* Prevent browser text inflation, not user zoom or the host's chosen font sizes.\n   Separate from narrow-layout activation so phone landscape stays protected. */\nhtml[data-dsh-mobile-text-sizing], html[data-dsh-mobile-text-sizing] body,\nhtml[data-dsh-mobile-text-sizing] #root {\n  -webkit-text-size-adjust: 100% !important;\n  text-size-adjust: 100% !important;\n}\n.dsh-mobile-newline { display: none !important; }\nhtml[data-dsh-mobile] .dsh-mobile-newline {\n  display: inline-flex !important; align-items: center; justify-content: center;\n  min-width: 36px; min-height: 36px; padding: 4px 7px; border: 1px solid #8793a455;\n  border-radius: 7px; background: transparent; color: inherit; font: inherit; font-size: 20px;\n  touch-action: manipulation; cursor: pointer; flex: 0 0 auto;\n}\nhtml[data-dsh-mobile] .dsh-mobile-newline:active { background: #6198d222; }\n/* Compatibility adapter: only active on narrow browser windows, never desktop chrome. */\nhtml[data-dsh-mobile] { overflow: hidden; overscroll-behavior-x: none; }\nhtml[data-dsh-mobile] body { overflow: hidden; width: 100%; height: 100%; margin: 0; }\nhtml[data-dsh-mobile] #root {\n  position: fixed; top: var(--dsh-mobile-top, 0px); left: 0;\n  width: 100%; max-width: 100%; height: var(--dsh-mobile-height, 100dvh);\n  min-height: 0; overflow: hidden;\n}\nhtml[data-dsh-mobile] [data-dsh-mobile-frame] {\n  width: 100%; min-width: 0; max-width: 100%; height: 100%; min-height: 0;\n  grid-template-columns: 0px minmax(0, 1fr) 0px !important;\n  transition: none !important;\n  --dsh-composer-text-max-height: max(48px, min(180px, calc(var(--dsh-mobile-height, 100dvh) * .28)));\n}\nhtml[data-dsh-mobile] [data-dsh-mobile-center] {\n  grid-column: 2; grid-row: 1; min-width: 0; max-width: 100%; overflow: hidden;\n}\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] {\n  grid-column: 1; grid-row: 1; width: 56px; min-width: 0; box-sizing: border-box;\n  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);\n}\nhtml[data-dsh-mobile] [data-dsh-mobile-frame]:not([data-sidebar-collapsed]) > [data-dsh-mobile-sidebar] {\n  position: absolute; inset: 0 auto 0 0; width: min(280px, calc(100% - 48px));\n  z-index: 32; box-shadow: 8px 0 32px rgb(0 0 0 / .18);\n  background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base, #fff));\n}\nhtml[data-dsh-mobile] [data-sidebar-collapsed] > [data-dsh-mobile-sidebar] {\n  visibility: hidden; pointer-events: none; width: 0;\n}\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] > * { max-width: 100%; box-sizing: border-box; }\nhtml[data-dsh-mobile] [data-dsh-mobile-frame] > [data-side] { display: none !important; }\nhtml[data-dsh-mobile] [data-dsh-mobile-center] ~ [data-rightbar-col] { grid-column: 3; grid-row: 1; }\nhtml[data-dsh-mobile] :is(input, textarea, select, [contenteditable='true'], [role='textbox']) {\n  font-size: 16px !important;\n}\nhtml[data-dsh-mobile] [data-composer-card] {\n  min-width: 0; max-width: 100%; font-size: 16px;\n  --dsh-composer-text-max-height: max(48px, min(180px, calc(var(--dsh-mobile-height, 100dvh) * .28)));\n}\nhtml[data-dsh-mobile] [data-composer-card] :is(button, [role='button']) { min-height: 40px; min-width: 36px; touch-action: manipulation; }\nhtml[data-dsh-mobile] [data-composer-card] [contenteditable] { scroll-margin-block: 12px; }\nhtml[data-dsh-mobile] [data-composer-dock] { padding-bottom: env(safe-area-inset-bottom, 0px); }\nhtml[data-dsh-mobile][data-dsh-mobile-keyboard] [data-composer-dock] { padding-bottom: 0; }\nhtml[data-dsh-mobile] :is(button, a, [role='button']) { touch-action: manipulation; }\nhtml[data-dsh-mobile] :is(pre, [data-diff], [data-read], [data-terminal]) { max-width: 100%; overflow-x: auto; }\n/* Keep React-owned labels intact; show a compact visual reading only on mobile. */\nhtml[data-dsh-mobile] [data-composer-dock] { gap: 3px; flex-wrap: wrap; }\nhtml[data-dsh-mobile] [data-composer-dock] [data-composer-stat] { font-size: 11px; line-height: 20px; }\nhtml[data-dsh-mobile] [data-composer-stat] > :first-child { gap: 3px; padding: 2px 3px; }\nhtml[data-dsh-mobile] [data-composer-stat] svg { width: 12px; height: 12px; }\nhtml[data-dsh-mobile] [data-dsh-mobile-stat-label] { font-size: 0; }\nhtml[data-dsh-mobile] [data-dsh-mobile-stat-label] > * { display: none; }\nhtml[data-dsh-mobile] [data-dsh-mobile-stat-label]::after {\n  content: attr(data-dsh-mobile-stat-label); font-size: 11px; line-height: 20px;\n}\nhtml[data-dsh-mobile] [data-composer-dock] > :last-child { font-size: 11px; }\n/* Settings is portalled beside #root; use its own stable modal marker. */\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] {\n  position: fixed; top: var(--dsh-mobile-top, 0px); left: 0;\n  width: 100%; max-width: 100%; height: var(--dsh-mobile-height, 100dvh);\n  max-height: var(--dsh-mobile-height, 100dvh); min-height: 0;\n  box-sizing: border-box; border-radius: 0;\n  display: flex; flex-direction: column; overflow: hidden;\n  padding-top: env(safe-area-inset-top, 0px);\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav {\n  flex: none; width: 100%; min-width: 0; padding: 0 12px;\n  gap: 0; box-sizing: border-box;\n  border-bottom: 1px solid var(--dsw-alias-border-l3, #ddd);\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav > :first-child {\n  display: flex; align-items: center; min-height: 52px;\n  padding: 0 52px 0 4px;\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav > :last-child {\n  display: flex; flex-direction: row; flex-wrap: nowrap; gap: 4px; min-width: 0;\n  overflow-x: auto; overflow-y: hidden; padding: 0 0 8px;\n  overscroll-behavior-x: contain; scroll-padding-inline: 8px;\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav button {\n  flex: none; min-height: 44px; height: auto; padding: 8px 12px;\n  white-space: nowrap; scroll-margin-inline: 8px;\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div {\n  display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden;\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :first-child {\n  height: auto; min-height: 44px; padding: 4px 12px; align-items: center;\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :first-child > :first-child {\n  flex-wrap: wrap; max-width: 100%; margin-left: 0;\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :first-child > button {\n  position: absolute; top: calc(env(safe-area-inset-top, 0px) + 4px); right: 8px;\n  width: 44px; height: 44px; z-index: 2;\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :last-child {\n  flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain;\n  padding: 8px 16px calc(20px + env(safe-area-inset-bottom, 0px));\n  overflow-wrap: anywhere; scroll-padding-block: 16px;\n}\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] :is(input, textarea, select) {\n  max-width: 100%; box-sizing: border-box;\n}\n.dsh-mobile-whale {\n  position: absolute; left: 0; top: 38%; z-index: 16;\n  width: 76px; height: 80px; padding: 0; border: 0; background: transparent;\n  cursor: grab; pointer-events: auto; touch-action: none; user-select: none;\n  transition: left .24s ease-out, top .24s ease-out;\n  -webkit-tap-highlight-color: transparent;\n}\n.dsh-mobile-whale img { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; pointer-events: none; }\n.dsh-mobile-whale:focus-visible { outline: 2px solid #5caee8; outline-offset: 1px; border-radius: 12px; }\n.dsh-mobile-whale[data-dragging] { width: 96px; height: 104px; cursor: grabbing; transition: none; }\n.dsh-mobile-whale[data-dragging] img { transform-origin: 50% 15%; animation: dsh-mascot-struggle .22s steps(2,end) infinite; }\n@keyframes dsh-mascot-struggle { 0%,100% { transform: rotate(-9deg) translateY(-2px); } 50% { transform: rotate(9deg) translateY(2px); } }\n@media (prefers-reduced-motion: reduce) {\n  .dsh-mobile-whale { transition: none; }\n  .dsh-mobile-whale[data-dragging] img { animation: none; }\n}\n.dsh-mobile-mascot-speck { position: fixed; width: 3px; height: 3px; background: #87a65c; box-shadow: 1px 1px #446743; pointer-events: none; z-index: 40; }\n/* Native-app launcher and extra view picker are desktop-oriented chrome. */\nhtml[data-dsh-mobile] [data-dsh-mobile-header] [data-open-target='directory'],\nhtml[data-dsh-mobile] [data-dsh-mobile-hidden-view-more] { display: none !important; }\n/* Header-only compact counters. Original labels remain the accessible names. */\nhtml[data-dsh-mobile] [data-dsh-mobile-header] { gap: 2px; padding-inline: 6px; min-width: 0; width: 100%; box-sizing: border-box; }\nhtml[data-dsh-mobile] [data-dsh-mobile-title-row] { min-width: 0; width: 100%; padding-inline-start: 0; box-sizing: border-box; }\nhtml[data-dsh-mobile] [data-dsh-mobile-title-cluster] { flex: 1 1 0%; min-width: 0; }\nhtml[data-dsh-mobile] [data-dsh-mobile-title-cluster] > nav { flex: 1 1 0%; min-width: 0; overflow: hidden; }\nhtml[data-dsh-mobile] [data-dsh-mobile-title-cluster] > nav > span { overflow: hidden; }\nhtml[data-dsh-mobile] [data-dsh-mobile-title-cluster] > nav :is(button, [title]) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\nhtml[data-dsh-mobile] [data-dsh-mobile-header-actions] { flex: 0 0 auto; }\nhtml[data-dsh-mobile] [data-conversation-header-corner] { margin-left: 2px !important; margin-right: 0 !important; flex: 0 0 auto; }\nhtml[data-dsh-mobile] [data-dsh-mobile-utilities]:not(:has(button:not([data-open-target] button))) { display: none; }\nhtml[data-dsh-mobile] [data-dsh-mobile-utilities] > :has([data-open-target='directory']):not(:has(button:not([data-open-target] button))) { display: none; }\nhtml[data-dsh-mobile] [data-dsh-mobile-title-row],\nhtml[data-dsh-mobile] [data-dsh-mobile-title-row] > div,\nhtml[data-dsh-mobile] [data-dsh-mobile-title-row] > div > div,\nhtml[data-dsh-mobile] [data-dsh-mobile-utilities] > div,\nhtml[data-dsh-mobile] [data-conversation-header-corner] { gap: 2px !important; column-gap: 2px !important; }\nhtml[data-dsh-mobile] [data-dsh-mobile-utilities] { margin-left: 2px !important; gap: 2px !important; }\nhtml[data-dsh-mobile] [data-dsh-mobile-header] button { padding-inline: 5px; min-width: 30px; min-height: 36px; }\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter] {\n  display: inline-flex; align-items: center; justify-content: center; gap: 3px !important;\n  border: 1px solid var(--dsw-alias-border-base, #8793a466) !important;\n  border-radius: 7px; padding-inline: 6px !important; min-width: 42px !important;\n}\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter][aria-expanded='true'] { border-color: #6198d2 !important; background: #6198d21a; }\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter] > svg:last-child { display: none; }\nhtml[data-dsh-mobile] [data-dsh-mobile-header-count] { font-size: 0 !important; }\nhtml[data-dsh-mobile] [data-dsh-mobile-header-count]::after { content: attr(data-dsh-mobile-header-count); font-size: 12px; font-variant-numeric: tabular-nums; }\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter]::before {\n  content: ''; width: 14px; height: 14px; flex: 0 0 14px; background: currentColor;\n  mask: var(--dsh-counter-icon) center / contain no-repeat;\n}\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter='agents'] { --dsh-counter-icon: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='none' stroke='black' stroke-width='1.5'%3E%3Ccircle cx='6' cy='4.5' r='2.2'/%3E%3Cpath d='M1.5 14v-2a4.5 4.5 0 019 0v2M11 2.5a2.2 2.2 0 010 4.2M12 9a3.5 3.5 0 012.5 3.5V14'/%3E%3C/g%3E%3C/svg%3E\"); }\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter='jobs'] { --dsh-counter-icon: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='none' stroke='black' stroke-width='1.5'%3E%3Crect x='1.5' y='2.5' width='13' height='11' rx='2'/%3E%3Cpath d='M4 6l2 2-2 2M8 10h4'/%3E%3C/g%3E%3C/svg%3E\"); }\n.dsh-mobile-backdrop {\n  position: absolute; inset: 0 0 0 min(280px, calc(100% - 48px));\n  border: 0; padding: 0; background: rgb(0 0 0 / .32); pointer-events: auto;\n  touch-action: manipulation; z-index: 1;\n}\n");
+          const adapter = installMobile(ctx, "/* Root canvas paints the non-content safe viewport with the active DSH palette. */\r\nhtml[data-dsh-mobile-standalone] {\r\n  background-color: var(--dsh-mobile-chrome-background) !important;\r\n}\r\n/* No hover-only reveal on touch: the first tap must reach the row action. */\r\nhtml[data-dsh-mobile] [data-dsh-mobile-row-actions] {\r\n  display: inline-flex !important; visibility: visible !important; opacity: 1 !important;\r\n  align-items: center; gap: 4px !important; flex: 0 0 auto;\r\n}\r\nhtml[data-dsh-mobile] [data-dsh-mobile-row-actions] button { min-width: 28px; min-height: 32px; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] [data-row-key] { touch-action: manipulation; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] [data-row-key^='workspace:'] > span:first-child { display: none !important; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] [data-row-key^='workspace:'] > span:nth-child(2) { display: inline-flex !important; }\r\n/* Prevent browser text inflation, not user zoom or the host's chosen font sizes.\r\n   Separate from narrow-layout activation so phone landscape stays protected. */\r\nhtml[data-dsh-mobile-text-sizing], html[data-dsh-mobile-text-sizing] body,\r\nhtml[data-dsh-mobile-text-sizing] #root {\r\n  -webkit-text-size-adjust: 100% !important;\r\n  text-size-adjust: 100% !important;\r\n}\r\n/* Compatibility adapter: only active on narrow browser windows, never desktop chrome. */\r\nhtml[data-dsh-mobile] { overflow: hidden; overscroll-behavior-x: none; }\r\nhtml[data-dsh-mobile] body { overflow: hidden; width: 100%; height: 100%; margin: 0; }\r\nhtml[data-dsh-mobile] #root {\r\n  position: fixed; top: var(--dsh-mobile-top, 0px); left: 0;\r\n  width: 100%; max-width: 100%; height: var(--dsh-mobile-height, 100dvh);\r\n  min-height: 0; overflow: hidden;\r\n}\r\nhtml[data-dsh-mobile] [data-dsh-mobile-frame] {\r\n  width: 100%; min-width: 0; max-width: 100%; height: 100%; min-height: 0;\r\n  grid-template-columns: 0px minmax(0, 1fr) 0px !important;\r\n  transition: none !important;\r\n  --dsh-composer-text-max-height: max(48px, min(180px, calc(var(--dsh-mobile-height, 100dvh) * .28)));\r\n}\r\nhtml[data-dsh-mobile] [data-dsh-mobile-center] {\r\n  grid-column: 2; grid-row: 1; min-width: 0; max-width: 100%; overflow: hidden;\r\n}\r\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] {\r\n  grid-column: 1; grid-row: 1; width: 56px; min-width: 0; box-sizing: border-box;\r\n  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);\r\n}\r\nhtml[data-dsh-mobile] [data-dsh-mobile-frame]:not([data-sidebar-collapsed]) > [data-dsh-mobile-sidebar] {\r\n  position: absolute; inset: 0 auto 0 0; width: min(280px, calc(100% - 48px));\r\n  z-index: 32; box-shadow: 8px 0 32px rgb(0 0 0 / .18);\r\n  background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base, #fff));\r\n}\r\nhtml[data-dsh-mobile] [data-sidebar-collapsed] > [data-dsh-mobile-sidebar] {\r\n  visibility: hidden; pointer-events: none; width: 0;\r\n}\r\nhtml[data-dsh-mobile] [data-dsh-mobile-sidebar] > * { max-width: 100%; box-sizing: border-box; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-frame] > [data-side] { display: none !important; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-center] ~ [data-rightbar-col] { grid-column: 3; grid-row: 1; }\r\nhtml[data-dsh-mobile] :is(input, textarea, select, [contenteditable='true'], [role='textbox']) {\r\n  font-size: 16px !important;\r\n}\r\nhtml[data-dsh-mobile] [data-composer-card] {\r\n  min-width: 0; max-width: 100%; font-size: 16px;\r\n  --dsh-composer-text-max-height: max(48px, min(180px, calc(var(--dsh-mobile-height, 100dvh) * .28)));\r\n}\r\nhtml[data-dsh-mobile] [data-composer-card] :is(button, [role='button']) { min-height: 40px; min-width: 36px; touch-action: manipulation; }\r\nhtml[data-dsh-mobile] [data-composer-card] [contenteditable] { scroll-margin-block: 12px; }\r\nhtml[data-dsh-mobile] [data-composer-dock] { padding-bottom: env(safe-area-inset-bottom, 0px); }\r\nhtml[data-dsh-mobile][data-dsh-mobile-keyboard] [data-composer-dock] { padding-bottom: 0; }\r\nhtml[data-dsh-mobile] :is(button, a, [role='button']) { touch-action: manipulation; }\r\nhtml[data-dsh-mobile] :is(pre, [data-diff], [data-read], [data-terminal]) { max-width: 100%; overflow-x: auto; }\r\n/* Keep React-owned labels intact; show a compact visual reading only on mobile. */\r\nhtml[data-dsh-mobile] [data-composer-dock] { gap: 3px; flex-wrap: wrap; }\r\nhtml[data-dsh-mobile] [data-composer-dock] [data-composer-stat] { font-size: 11px; line-height: 20px; }\r\nhtml[data-dsh-mobile] [data-composer-stat] > :first-child { gap: 3px; padding: 2px 3px; }\r\nhtml[data-dsh-mobile] [data-composer-stat] svg { width: 12px; height: 12px; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-stat-label] { font-size: 0; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-stat-label] > * { display: none; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-stat-label]::after {\r\n  content: attr(data-dsh-mobile-stat-label); font-size: 11px; line-height: 20px;\r\n}\r\nhtml[data-dsh-mobile] [data-composer-dock] > :last-child { font-size: 11px; }\r\n/* Settings is portalled beside #root; use its own stable modal marker. */\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] {\r\n  position: fixed; top: var(--dsh-mobile-top, 0px); left: 0;\r\n  width: 100%; max-width: 100%; height: var(--dsh-mobile-height, 100dvh);\r\n  max-height: var(--dsh-mobile-height, 100dvh); min-height: 0;\r\n  box-sizing: border-box; border-radius: 0;\r\n  display: flex; flex-direction: column; overflow: hidden;\r\n  padding-top: env(safe-area-inset-top, 0px);\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav {\r\n  flex: none; width: 100%; min-width: 0; padding: 0 12px;\r\n  gap: 0; box-sizing: border-box;\r\n  border-bottom: 1px solid var(--dsw-alias-border-l3, #ddd);\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav > :first-child {\r\n  display: flex; align-items: center; min-height: 52px;\r\n  padding: 0 52px 0 4px;\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav > :last-child {\r\n  display: flex; flex-direction: row; flex-wrap: nowrap; gap: 4px; min-width: 0;\r\n  overflow-x: auto; overflow-y: hidden; padding: 0 0 8px;\r\n  overscroll-behavior-x: contain; scroll-padding-inline: 8px;\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav button {\r\n  flex: none; min-height: 44px; height: auto; padding: 8px 12px;\r\n  white-space: nowrap; scroll-margin-inline: 8px;\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div {\r\n  display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden;\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :first-child {\r\n  height: auto; min-height: 44px; padding: 4px 12px; align-items: center;\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :first-child > :first-child {\r\n  flex-wrap: wrap; max-width: 100%; margin-left: 0;\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :first-child > button {\r\n  position: absolute; top: calc(env(safe-area-inset-top, 0px) + 4px); right: 8px;\r\n  width: 44px; height: 44px; z-index: 2;\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] > nav + div > :last-child {\r\n  flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain;\r\n  padding: 8px 16px calc(20px + env(safe-area-inset-bottom, 0px));\r\n  overflow-wrap: anywhere; scroll-padding-block: 16px;\r\n}\r\nhtml[data-dsh-mobile] [data-shortcut-modal='settings'] :is(input, textarea, select) {\r\n  max-width: 100%; box-sizing: border-box;\r\n}\r\n.dsh-mobile-whale {\r\n  position: absolute; left: 0; top: 38%; z-index: 16;\r\n  width: 76px; height: 80px; padding: 0; border: 0; background: transparent;\r\n  cursor: grab; pointer-events: auto; touch-action: none; user-select: none;\r\n  transition: left .24s ease-out, top .24s ease-out;\r\n  -webkit-tap-highlight-color: transparent;\r\n}\r\n.dsh-mobile-whale img { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; pointer-events: none; }\r\n.dsh-mobile-whale:focus-visible { outline: 2px solid #5caee8; outline-offset: 1px; border-radius: 12px; }\r\n.dsh-mobile-whale[data-dragging] { width: 96px; height: 104px; cursor: grabbing; transition: none; }\r\n.dsh-mobile-whale[data-dragging] img { transform-origin: 50% 15%; animation: dsh-mascot-struggle .22s steps(2,end) infinite; }\r\n@keyframes dsh-mascot-struggle { 0%,100% { transform: rotate(-9deg) translateY(-2px); } 50% { transform: rotate(9deg) translateY(2px); } }\r\n@media (prefers-reduced-motion: reduce) {\r\n  .dsh-mobile-whale { transition: none; }\r\n  .dsh-mobile-whale[data-dragging] img { animation: none; }\r\n}\r\n.dsh-mobile-mascot-speck { position: fixed; width: 3px; height: 3px; background: #87a65c; box-shadow: 1px 1px #446743; pointer-events: none; z-index: 40; }\r\n/* Native-app launcher and extra view picker are desktop-oriented chrome. */\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header] [data-open-target='directory'],\r\nhtml[data-dsh-mobile] [data-dsh-mobile-hidden-view-more] { display: none !important; }\r\n/* Header-only compact counters. Original labels remain the accessible names. */\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header] { gap: 2px; padding-inline: 6px; min-width: 0; width: 100%; box-sizing: border-box; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-title-row] { min-width: 0; width: 100%; padding-inline-start: 0; box-sizing: border-box; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-title-cluster] { flex: 1 1 0%; min-width: 0; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-title-cluster] > nav { flex: 1 1 0%; min-width: 0; overflow: hidden; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-title-cluster] > nav > span { overflow: hidden; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-title-cluster] > nav :is(button, [title]) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header-actions] { flex: 0 0 auto; }\r\nhtml[data-dsh-mobile] [data-conversation-header-corner] { margin-left: 2px !important; margin-right: 0 !important; flex: 0 0 auto; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-utilities]:not(:has(button:not([data-open-target] button))) { display: none; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-utilities] > :has([data-open-target='directory']):not(:has(button:not([data-open-target] button))) { display: none; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-title-row],\r\nhtml[data-dsh-mobile] [data-dsh-mobile-title-row] > div,\r\nhtml[data-dsh-mobile] [data-dsh-mobile-title-row] > div > div,\r\nhtml[data-dsh-mobile] [data-dsh-mobile-utilities] > div,\r\nhtml[data-dsh-mobile] [data-conversation-header-corner] { gap: 2px !important; column-gap: 2px !important; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-utilities] { margin-left: 2px !important; gap: 2px !important; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header] button { padding-inline: 5px; min-width: 30px; min-height: 36px; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter] {\r\n  display: inline-flex; align-items: center; justify-content: center; gap: 3px !important;\r\n  border: 1px solid var(--dsw-alias-border-base, #8793a466) !important;\r\n  border-radius: 7px; padding-inline: 6px !important; min-width: 42px !important;\r\n}\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter][aria-expanded='true'] { border-color: #6198d2 !important; background: #6198d21a; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter] > svg:last-child { display: none; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header-count] { font-size: 0 !important; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header-count]::after { content: attr(data-dsh-mobile-header-count); font-size: 12px; font-variant-numeric: tabular-nums; }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter]::before {\r\n  content: ''; width: 14px; height: 14px; flex: 0 0 14px; background: currentColor;\r\n  mask: var(--dsh-counter-icon) center / contain no-repeat;\r\n}\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter='agents'] { --dsh-counter-icon: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='none' stroke='black' stroke-width='1.5'%3E%3Ccircle cx='6' cy='4.5' r='2.2'/%3E%3Cpath d='M1.5 14v-2a4.5 4.5 0 019 0v2M11 2.5a2.2 2.2 0 010 4.2M12 9a3.5 3.5 0 012.5 3.5V14'/%3E%3C/g%3E%3C/svg%3E\"); }\r\nhtml[data-dsh-mobile] [data-dsh-mobile-header-counter='jobs'] { --dsh-counter-icon: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='none' stroke='black' stroke-width='1.5'%3E%3Crect x='1.5' y='2.5' width='13' height='11' rx='2'/%3E%3Cpath d='M4 6l2 2-2 2M8 10h4'/%3E%3C/g%3E%3C/svg%3E\"); }\r\n.dsh-mobile-backdrop {\r\n  position: absolute; inset: 0 0 0 min(280px, calc(100% - 48px));\r\n  border: 0; padding: 0; background: rgb(0 0 0 / .32); pointer-events: auto;\r\n  touch-action: manipulation; z-index: 1;\r\n}\r\n");
           function Navigation({t}) {
             const state = React.useSyncExternalStore(adapter.subscribe, adapter.getSnapshot);
             const previous = React.useRef(state);
@@ -429,37 +505,20 @@ function installMascot(button, frames, win = window) {
               onClick: adapter.toggle,
             }, React.createElement('img', {src: mascotFrames[0], alt: '', draggable: false}));
           }
-          function Newline({t, inputActions}) {
-            function insert(event) {
-              if (event.type === 'pointerdown' && (event.button !== 0 || event.isPrimary === false)) return;
-              if (event.type === 'click' && event.detail !== 0) return;
-              event.preventDefault();
-              const editor = document.querySelector('[data-dsh-mobile-center] [data-composer-input][contenteditable="true"]');
-              if (!editor || editor.hasAttribute('data-composer-composing') || !inputActions) return;
-              // Public revision-guarded API preserves the editor/selection/undo.
-              const span = inputActions.captureInsertion();
-              if (inputActions.insertText('\n', span)) {
-                inputActions.persistDraft();
-                editor.focus({preventScroll: true});
-              }
-            }
-            return React.createElement('button', {
-              type: 'button', className: 'dsh-mobile-newline',
-              'aria-label': t('newline'), title: t('newline'),
-              onPointerDown: insert, onClick: insert,
-              onMouseDown: event => event.preventDefault(),
-            }, '↵');
+          function InputBridge({inputActions}) {
+            React.useEffect(() => adapter.setInputActions(inputActions), [inputActions]);
+            return null;
           }
-          let stop, stopNewline;
+          let stop, stopInput;
           try {
-            stopNewline = ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
-              name: 'conversation.input.right', id: 'mobile-ui.newline', locale: 'mobileUi',
-            }, Newline));
+            stopInput = ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+              name: 'conversation.input.right', id: 'mobile-ui.input', locale: 'mobileUi',
+            }, InputBridge));
             stop = ctx.slots.inject('shell.overlay', () => ctx.slots.register({
               name: 'shell.overlay', id: 'mobile-ui.backdrop', locale: 'mobileUi',
             }, Navigation));
-          } catch (error) { stopNewline?.(); adapter.dispose(); throw error; }
-          return () => { stop(); stopNewline(); adapter.dispose(); };
+          } catch (error) { stopInput?.(); adapter.dispose(); throw error; }
+          return () => { stop(); stopInput(); adapter.dispose(); };
         });
       },
     };

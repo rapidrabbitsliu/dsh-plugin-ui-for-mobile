@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.16 — public release (includes local 0.1.15)
+
+- Standalone mobile Web apps set opaque Apple status-bar metadata to black/default from the resolved DSH scheme and paint the root canvas with the body background; preserve host theme-color and existing safe viewport geometry.
+- React to theme changes, standalone media changes and pageshow; restore existing metadata and remove owned markers/styles on disposal.
+- Simulated regression covers dark/light and cleanup; User testing found native iOS status-bar theme following intermittent (dark DSH can retain a light status bar). This is a known unresolved issue, not a verified fix; refreshing/reopening is not guaranteed to help.
+
+## 0.1.15 — local preview
+
+- Plain Enter in the narrow-screen composer inserts a newline at the caret through the public input API; no submit or blur. IME, completion and modified Enter remain host-owned.
+- Only a composer Send/Queue/Steer button click arms draft-clear blur; Stop and blocked sends do not.
+- Remove the standalone newline UI button; retain an invisible session input-action bridge with lifecycle cleanup.
+- Simulated regression covers caret insertion, focus, composition, modifiers, send-button draft clearing and desktop passthrough; real-phone verification pending.
+
 ## 0.1.14 — public release
 
 - Rewrite the README with complete Chinese feature/interaction documentation, an aligned English summary, installation examples, verification scope and known limitations.
